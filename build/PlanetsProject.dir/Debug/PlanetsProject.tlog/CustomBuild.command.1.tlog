@@ -1,0 +1,10 @@
+^C:\USERS\MYERSJR\ONEDRIVE - MILWAUKEE SCHOOL OF ENGINEERING\DOCUMENTS\COURSES\JS1\CPP\PLANETS\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/myersjr/OneDrive - Milwaukee School of Engineering/Documents/Courses/JS1/cpp/planets" "-BC:/Users/myersjr/OneDrive - Milwaukee School of Engineering/Documents/Courses/JS1/cpp/planets/build" --check-stamp-file "C:/Users/myersjr/OneDrive - Milwaukee School of Engineering/Documents/Courses/JS1/cpp/planets/build/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

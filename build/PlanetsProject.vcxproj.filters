@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\src\core\PhysicsEngine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\src\core\Planet.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\src\core\Simulation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\src\core\Vector2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\src\glad.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\lib\imgui\imgui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\lib\imgui\imgui_draw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\lib\imgui\imgui_tables.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\lib\imgui\imgui_widgets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\lib\imgui\backends\imgui_impl_glfw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\lib\imgui\backends\imgui_impl_opengl3.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\myersjr\OneDrive - Milwaukee School of Engineering\Documents\Courses\JS1\cpp\planets\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{F8F2DA05-81D2-3689-B46D-A4C221117A71}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
