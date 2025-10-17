@@ -1,3 +1,0 @@
-C:/Users/myersjr/OneDrive - Milwaukee School of Engineering/Documents/Courses/JS1/cpp/planets/build/CMakeFiles/PlanetsProject.dir
-C:/Users/myersjr/OneDrive - Milwaukee School of Engineering/Documents/Courses/JS1/cpp/planets/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/myersjr/OneDrive - Milwaukee School of Engineering/Documents/Courses/JS1/cpp/planets/build/CMakeFiles/ZERO_CHECK.dir
