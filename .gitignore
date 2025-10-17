@@ -1,0 +1,72 @@
+## General
+/.vs/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+## Build outputs
+/build/
+/**/build/
+/*.o
+/*.obj
+/*.lo
+/*.la
+/*.al
+/*.lai
+/*.a
+/*.lib
+/*.dll
+/*.so
+/*.dylib
+/*.exe
+/*.out
+/*.app
+
+## CMake
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+/install_manifest.txt
+/*.vcxproj*
+
+## VS Code
+/.vscode/
+
+## MSYS2 / MinGW generated
+/mingw64/
+/msys64/
+/*.exe
+/*.dll
+
+## Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vcxproj.user
+ipch/
+*.VC.db
+*.VC.VC.opendb
+
+## CLion / JetBrains
+.idea/
+*.iml
+
+## Logs and temp
+.log
+tmp/
+temp/
+
+## OneDrive
+~$*
+.~lock.*
+
+## Libraries built into repo (if any) - keep source, ignore binaries
+/lib/**/*.a
+/lib/**/*.dll
+/lib/**/*.lib
+/lib/**/*.so
+
+## Generated assets
+/assets/*.bin
