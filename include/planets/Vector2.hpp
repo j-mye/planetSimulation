@@ -15,6 +15,20 @@ public:
     Vector2(float x, float y, float vx, float vy) : position(x, y), velocity(vx, vy) {}
     Vector2(const glm::vec2& pos, const glm::vec2& vel) : position(pos), velocity(vel) {}
 
+    float getX() const {
+        return position.x;
+    }
+    float getY() const {
+        return position.y;
+    }
+    float getVX() const {
+        return velocity.x;
+    }
+    float getVY() const {
+        return velocity.y;
+    }
+
+
     // compound assignments
     Vector2& operator+=(const Vector2& other) {
         position += other.position;

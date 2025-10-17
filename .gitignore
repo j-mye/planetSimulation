@@ -58,6 +58,9 @@ ipch/
 tmp/
 temp/
 
+#bat files
+*.bat
+
 ## OneDrive
 ~$*
 .~lock.*
