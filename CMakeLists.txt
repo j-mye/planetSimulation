@@ -38,7 +38,7 @@ add_executable(PlanetsProject ${SOURCES})
 # Include directories
 # -------------------------------------------------------------
 target_include_directories(PlanetsProject PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include               # Your own headers
+    ${CMAKE_CURRENT_SOURCE_DIR}/include               # My headers
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/glm               # GLM math library
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui             # ImGui core headers
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/imgui/backends    # ImGui backend headers
