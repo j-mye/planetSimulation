@@ -11,7 +11,7 @@
 class PhysicsEngine {
 private:
     std::vector<Planet*> bodies;
-    double G = 6.67430e-11; // gravitational constant (can be scaled)
+    double G = 6.67430e-11;
     double softening = 1e-3;
 
 public:
@@ -22,8 +22,7 @@ public:
     void addBody(Planet* body) { bodies.push_back(body); }
     void clearBodies() { bodies.clear(); }
 
-    void computeForces(float dt) {
-        // compute pairwise forces and apply accelerations to bodies for timestep dt
+    void computeForces(const float dt) {
         const size_t n = bodies.size();
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = i + 1; j < n; ++j) {
@@ -45,8 +44,11 @@ public:
         }
     }
 
-    void integrate(float dt) {
-        for (Planet* p : bodies) p->integrate(dt);
+    void integrate(const float dt) {
+        for (Planet* p : bodies) {
+            p->setP(p->getP() + (p->getV() * dt));
+            p->recordPosition();
+        }
     }
 };
 

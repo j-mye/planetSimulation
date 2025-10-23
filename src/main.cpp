@@ -1,123 +1,154 @@
 #include <iostream>
+#include <vector>
+#include <cmath>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include "planets/Renderer.hpp"
+#include "planets/Planet.hpp"
+#include "planets/Vector2.hpp"
+#include "planets/Camera.hpp"
 
 using namespace std;
 
-void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-    glViewport(0, 0, width, height);
-}
-
-// Simple vertex and fragment shaders
-const char* vertexShaderSource = R"(
-#version 330 core
-layout (location = 0) in vec3 aPos;
-layout (location = 1) in vec3 aColor;
-
-out vec3 ourColor;
-
-void main() {
-    gl_Position = vec4(aPos, 1.0);
-    ourColor = aColor;
-}
-)";
-
-const char* fragmentShaderSource = R"(
-#version 330 core
-in vec3 ourColor;
-out vec4 FragColor;
-
-void main() {
-    FragColor = vec4(ourColor, 1.0);
-}
-)";
-
 int main() {
-    // 1. Initialize GLFW
-    if (!glfwInit()) {
-        cout << "Failed to initialize GLFW" << endl;
+    // Initialize the enhanced renderer
+    Renderer renderer(1280, 720, "Planetary Simulation");
+    
+    if (!renderer.init()) {
+        cout << "Failed to initialize renderer" << endl;
         return -1;
     }
 
-    // 2. Set GLFW window hints BEFORE creating window
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_SAMPLES, 4); // optional MSAA
+    // Initialize the camera system
+    Camera camera(1280.0f, 720.0f);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Planetary Simulation", NULL, NULL);
-    if (window == NULL) {
-        cout << "Failed to create GLFW window" << endl;
-        glfwTerminate();
-        return -2;
+    // Create a planetary system
+    vector<Planet> planets;
+    
+    // Central star (large mass at origin)
+    Planet star(Vector2(0.0f, 0.0f), Vector2(0.0f, 0.0f));
+    star.setMass(1000.0f);
+    star.setRadius(0.2f);
+    planets.push_back(star);
+    
+    // Planet 1: Close orbit (reduced velocity for stability)
+    Planet planet1(Vector2(0.0f, 0.8f), Vector2(0.1f, 0.0f));
+    planet1.setMass(5.0f);
+    planet1.setRadius(0.05f);
+    planets.push_back(planet1);
+    
+    // Planet 2: Medium orbit (reduced velocity for stability)
+    Planet planet2(Vector2(0.0f, 1.5f), Vector2(0.08f, 0.0f));
+    planet2.setMass(3.0f);
+    planet2.setRadius(0.04f);
+    planets.push_back(planet2);
+    
+    // Planet 3: Outer orbit (reduced velocity for stability)
+    Planet planet3(Vector2(0.0f, 2.5f), Vector2(0.05f, 0.0f));
+    planet3.setMass(2.0f);
+    planet3.setRadius(0.03f);
+    planets.push_back(planet3);
+    
+    // Moon of planet 1 (reduced velocity for stability)
+    Planet moon(Vector2(0.0f, 0.9f), Vector2(0.12f, 0.0f));
+    moon.setMass(0.5f);
+    moon.setRadius(0.02f);
+    planets.push_back(moon);
+
+    cout << "Planetary Simulation Started!" << endl;
+    cout << "Controls:" << endl;
+    cout << "  Mouse: Drag to pan, Scroll to zoom" << endl;
+    cout << "  Arrow Keys: Pan camera" << endl;
+    cout << "  +/-: Zoom in/out" << endl;
+    cout << "  Z: Toggle auto-zoom (keeps all planets visible)" << endl;
+    cout << "  T: Toggle trails" << endl;
+    cout << "  ESC: Exit" << endl;
+    cout << "  Camera automatically follows center of mass!" << endl;
+
+    // Main simulation loop
+    float timeStep = 0.000001f; // ~60 FPS
+    float time = 0.0f;
+    
+    while (!renderer.shouldClose()) {
+        // Update physics simulation
+        for (size_t i = 0; i < planets.size(); ++i) {
+            Vector2 totalForce(0.0f, 0.0f);
+            
+            // Calculate gravitational forces from all other planets
+            for (size_t j = 0; j < planets.size(); ++j) {
+                if (i != j) {
+                    Vector2 diff = planets[j].getP() - planets[i].getP();
+                    float distance = diff.length();
+                    
+                    if (distance > 0.01f) { // Avoid division by zero
+                        // Proper gravitational force: F = G * m1 * m2 / r^2
+                        // Using G = 1 for simplicity, but need proper scaling
+                        float force = (planets[i].getMass() * planets[j].getMass()) / (distance * distance);
+                        Vector2 forceVector = diff.normalized() * force;
+                        totalForce += forceVector;
+                    }
+                }
+            }
+            
+            // Apply force and update position
+            planets[i].applyForce(totalForce, timeStep);
+            planets[i].setP(planets[i].getP() + planets[i].getV() * timeStep);
+            planets[i].recordPosition(); // Record for trail
+        }
+        
+        // Update camera to follow center of mass
+        camera.update(planets, timeStep);
+        
+        // Handle input
+        renderer.handleInput();
+        
+        // Handle camera zoom input
+        GLFWwindow* window = renderer.getWindow();
+        if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
+            camera.zoomBy(1.05f);
+        }
+        if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
+            camera.zoomBy(0.95f);
+        }
+        
+        // Handle camera pan input
+        float panSpeed = 0.01f / camera.getZoom();
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+            camera.pan(-panSpeed, 0.0f);
+        }
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+            camera.pan(panSpeed, 0.0f);
+        }
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+            camera.pan(0.0f, panSpeed);
+        }
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+            camera.pan(0.0f, -panSpeed);
+        }
+        
+        // Toggle auto-zoom with Z key
+        static bool zKeyPressed = false;
+        if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS && !zKeyPressed) {
+            camera.setAutoZoom(!camera.isAutoZoomEnabled());
+            std::cout << "Auto-zoom " << (camera.isAutoZoomEnabled() ? "enabled" : "disabled") << std::endl;
+            zKeyPressed = true;
+        } else if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_RELEASE) {
+            zKeyPressed = false;
+        }
+        
+        // Render frame
+        renderer.beginFrame();
+        renderer.drawBackground();
+        renderer.drawTrails(planets, camera);
+        renderer.drawPlanets(planets, camera);
+        renderer.endFrame();
+        
+        time += timeStep;
     }
-    glfwMakeContextCurrent(window);
 
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        cout << "Failed to initialize GLAD" << endl;
-        return -3;
-    }
-
-    glViewport(0, 0, 800, 600);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
-    float vertices[] = {
-       -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 1.0f,
-        0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f
-    };
-
-    // 5. Generate VAO and VBO AFTER OpenGL context
-    GLuint VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glBindVertexArray(0);
-
-    // 6. Compile shaders
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-
-    // 7. Render loop
-    while (!glfwWindowShouldClose(window)) {
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glUseProgram(shaderProgram);
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-
-    // 8. Cleanup
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    glDeleteProgram(shaderProgram);
-
-    glfwTerminate();
+    // Cleanup
+    renderer.cleanup();
+    
+    cout << "Simulation ended after " << time << " seconds" << endl;
     return 0;
 }

@@ -17,6 +17,7 @@ private:
     Vector2 p;
     Vector2 v;
     float mass = 1.0f;
+    float radius = 1.0f;
 
     // trail of previous positions for visualization
     std::deque<Vector2> trail;
@@ -29,6 +30,9 @@ public:
 
     float getMass() const { return mass; }
     void setMass(float m) { mass = m; }
+
+    float getRadius() const { return radius; }
+    void setRadius(float r) { radius = r; }
 
     const Vector2& getV() const { return v; }
     void setV(const Vector2& newV) { v = newV; }
@@ -43,34 +47,21 @@ public:
         trail.push_back(p);
     }
 
-    // Integrate position using current velocity and change in time
-    // void integrate(float dt) {
-    //     p += v * dt;
-    //     recordPosition();
-    // }
-
     // accessors for trail and trail control
     const std::deque<Vector2>& getTrail() const { return trail; }
     void clearTrail() { trail.clear(); }
 
-    // magnitude of current velocity
     float getSpeed() const {
         const float vx = v.getX();
         const float vy = v.getY();
         return std::sqrt(vx*vx + vy*vy);
     }
 
-    // apply a force for duration dt (F = m * a => a = F/m)
+    // apply a force for duration dt (F = ma -> a = F/m)
     void applyForce(const Vector2& force, float dt) {
         // acceleration = force / mass
         Vector2 acc = force / static_cast<double>(mass);
         v += acc * dt;
-    }
-
-    // integrate position using current velocity and change in time
-    void integrate(float dt) {
-        p += v * dt;
-        recordPosition();
     }
 
     // print planet info to console (debugging)
