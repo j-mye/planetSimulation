@@ -9,16 +9,35 @@ class Simulation {
 private:
     PhysicsEngine physics;
     std::vector<Planet> planets;
-    float deltaTime = 0.000001f;
+    float deltaTime = 0.0015f;
     bool running = false;
+
+    // N-body physics parameters (softened gravity)
+    float G = 0.05f;
+    float softening = 0.02f;
+
+    // Internal helpers
+    void computeForces();
+    void integrate();
+    std::vector<Vector2> temp_forces;
 
 public:
     Simulation() = default;
     void init();
+    // Initialize random system with N bodies
+    void initRandom(int N, unsigned seed = 1337);
+
+    // Advance physics by internal deltaTime (one fixed step)
+    void step();
+
+    // General update hook (kept for compatibility)
     void update();
+
     void run(int steps = 1000);
     void printStatus() const;
     std::vector<Planet>& getPlanets() { return planets; }
+    void setTimeStep(float dt) { deltaTime = dt; }
+    void setGravityParams(float g, float eps) { G = g; softening = eps; }
 };
 
 #endif //SIMULATION_HPP
