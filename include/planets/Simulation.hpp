@@ -9,7 +9,7 @@ class Simulation {
 private:
     PhysicsEngine physics;
     std::vector<Planet> planets;
-    float deltaTime = 0.016f;
+    float deltaTime = 0.000001f;
     bool running = false;
 
 public:

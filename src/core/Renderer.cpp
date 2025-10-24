@@ -3,32 +3,33 @@
 #include <vector>
 #include <algorithm>
 
-// Planet shader sources
+// Planet shader sources (simple, uniform-colored circular points)
 static const char* planetVertexShaderSrc = R"(
 #version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in float aMass;
-layout(location = 2) in vec3 aVelocity;
+layout(location = 2) in vec3 aVelocity; // unused here, kept for stride compatibility
+layout(location = 3) in vec3 aColor;
+
+uniform mat4 uView;
 
 out vec3 vColor;
 
-uniform mat4 uView;
 void main() {
     gl_Position = uView * vec4(aPos, 0.0, 1.0);
-    gl_PointSize = aMass * 3.0;
-    float speed = length(aVelocity);
-    vColor = vec3(speed, 0.3, 1.0 - speed);
+    gl_PointSize = max(1.5, aMass * 2.0);
+    vColor = aColor;
 }
 )";
 
 static const char* planetFragmentShaderSrc = R"(
 #version 330 core
-in vec3 vColor;
 out vec4 FragColor;
+in vec3 vColor;
 void main() {
     float dist = length(gl_PointCoord - vec2(0.5));
-    float intensity = exp(-6.0 * dist * dist);
-    FragColor = vec4(vColor * intensity, intensity);
+    float alpha = smoothstep(0.5, 0.45, dist);
+    FragColor = vec4(vColor, alpha);
 }
 )";
 
@@ -54,7 +55,7 @@ out vec4 FragColor;
 
 uniform vec3 uColor;
 void main() {
-    float alpha = 1.0 - vAge;
+    float alpha = (1.0 - vAge) * 0.6; // dim overall trail alpha to prevent bright center
     FragColor = vec4(uColor, alpha);
 }
 )";
@@ -63,23 +64,72 @@ void main() {
 static const char* backgroundVertexShaderSrc = R"(
 #version 330 core
 layout(location = 0) in vec2 aPos;
-
-out vec2 uv;
-
+out vec2 vNdc;
 void main() {
     gl_Position = vec4(aPos, 0.0, 1.0);
-    uv = (aPos + 1.0) * 0.5;
+    vNdc = aPos; // NDC in [-1,1]
 }
 )";
 
 static const char* backgroundFragmentShaderSrc = R"(
 #version 330 core
+in vec2 vNdc;
 out vec4 FragColor;
-in vec2 uv;
+
+uniform vec2 uCamPos;
+uniform float uCamZoom;
+uniform float uTime;
+
+// Hash functions for procedural stars
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+vec2 hash22(vec2 p) {
+    float n = hash12(p);
+    float m = hash12(p + 17.17);
+    return vec2(n, m);
+}
+
+// World-anchored parallax starfield
+float starLayer(vec2 world, float cellScale, float radius, float density, float twinkle) {
+    // Scale world space into a star grid
+    vec2 g = floor(world * cellScale);
+    vec2 f = fract(world * cellScale);
+    // Random star position within the cell
+    vec2 starPos = hash22(g) - 0.5;
+    // Distance to the star
+    float d = length(f - (starPos + 0.5));
+    // Star core falloff
+    float core = smoothstep(radius, 0.0, d);
+    // Random presence/brightness per cell
+    float present = step(1.0 - density, hash12(g * 1.73));
+    // Subtle twinkle
+    float tw = 0.85 + 0.15 * sin(uTime * (1.0 + hash12(g * 3.1)) * 2.0);
+    return core * present * (twinkle > 0.0 ? tw : 1.0);
+}
+
 void main() {
+    // Convert NDC to world space using camera (parallax layers use different effective zooms)
+    vec2 worldNear = uCamPos + (vNdc / max(uCamZoom, 0.001));        // near layer moves more
+    vec2 worldFar  = uCamPos + (vNdc / max(uCamZoom * 3.0, 0.001));   // far layer moves less
+
+    // Two star layers with different densities/scales
+    float sFar  = starLayer(worldFar,  0.08, 0.05, 0.96, 1.0);  // many tiny distant stars
+    float sNear = starLayer(worldNear, 0.035, 0.08, 0.90, 1.0); // fewer/larger nearby stars
+
+    // Base space color gradient (subtle)
     vec3 top = vec3(0.02, 0.02, 0.07);
-    vec3 bottom = vec3(0.0, 0.0, 0.0);
-    FragColor = vec4(mix(bottom, top, uv.y), 1.0);
+    vec3 bot = vec3(0.0,  0.0,  0.00);
+    float y = (vNdc.y * 0.5 + 0.5);
+    vec3 bg = mix(bot, top, y);
+
+    // Star color (cool white with slight blue tint)
+    vec3 starCol = vec3(0.85, 0.90, 1.0);
+    vec3 col = bg + starCol * (0.6 * sFar + 1.0 * sNear);
+
+    FragColor = vec4(col, 1.0);
 }
 )";
 
@@ -149,7 +199,8 @@ Renderer::Renderer(int w, int h, const char* title)
       trailVAO(0), trailVBO(0), trailShaderProgram(0),
       backgroundVAO(0), backgroundVBO(0), backgroundShaderProgram(0),
       cameraPosition(0.0f, 0.0f), cameraZoom(1.0f),
-      trailsEnabled(true), maxTrailLength(500),
+            trailsEnabled(true), maxTrailLength(500),
+            starfieldEnabled(false),
       mousePressed(false), lastMousePos(0.0f, 0.0f) {
     currentRenderer = this;
 }
@@ -180,9 +231,9 @@ bool Renderer::init() {
 
     glViewport(0, 0, width, height);
     
-    // Enable blending for glow effects
+    // Enable alpha blending (prevents bright additive hotspot at COM)
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
     // Enable point size control
     glEnable(GL_PROGRAM_POINT_SIZE);
@@ -223,13 +274,15 @@ bool Renderer::init() {
     glBindBuffer(GL_ARRAY_BUFFER, planetVBO);
     glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
 
-    // Planet vertex attributes: position (vec2), mass (float), velocity (vec3)
+    // Planet vertex attributes: position (vec2), mass (float), velocity (vec3), color (vec3)
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(2 * sizeof(float)));
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6 * sizeof(float)));
 
     // Create trail VAO and VBO
     glGenVertexArrays(1, &trailVAO);
@@ -305,10 +358,24 @@ void Renderer::beginFrame() {
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void Renderer::drawBackground() {
+void Renderer::drawBackground(const Camera& camera) {
+    if (!starfieldEnabled) {
+        return; // disabled for debugging visibility issues
+    }
+    // Draw the starfield background using the provided camera
     glUseProgram(backgroundShaderProgram);
     glBindVertexArray(backgroundVAO);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    {
+        GLint locCamPos  = glGetUniformLocation(backgroundShaderProgram, "uCamPos");
+        GLint locCamZoom = glGetUniformLocation(backgroundShaderProgram, "uCamZoom");
+        // Keep time uniform but we won't animate unless enabled later
+        GLint locTime    = glGetUniformLocation(backgroundShaderProgram, "uTime");
+        glm::vec2 camPos = camera.getPosition();
+        glUniform2f(locCamPos,  camPos.x, camPos.y);
+        glUniform1f(locCamZoom, camera.getZoom());
+        glUniform1f(locTime,    static_cast<float>(glfwGetTime()));
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
     glBindVertexArray(0);
     glUseProgram(0);
 }
@@ -318,7 +385,7 @@ void Renderer::drawPlanets(const std::vector<Planet>& planets, const Camera& cam
 
     // Extract planet data
     std::vector<float> planetData;
-    planetData.reserve(planets.size() * 6); // pos(2) + mass(1) + velocity(3)
+    planetData.reserve(planets.size() * 9); // pos(2) + mass(1) + velocity(3) + color(3)
 
     for (const auto& planet : planets) {
         // Position
@@ -332,9 +399,17 @@ void Renderer::drawPlanets(const std::vector<Planet>& planets, const Camera& cam
         planetData.push_back(planet.getV().getX());
         planetData.push_back(planet.getV().getY());
         planetData.push_back(0.0f); // Z component (not used in 2D)
+
+        // Color
+        const glm::vec3 c = planet.getColor();
+        planetData.push_back(c.r);
+        planetData.push_back(c.g);
+        planetData.push_back(c.b);
     }
 
-    // Upload data to GPU
+    // Background is drawn separately via drawBackground(camera)
+
+    // Upload planet data to GPU
     glBindBuffer(GL_ARRAY_BUFFER, planetVBO);
     glBufferData(GL_ARRAY_BUFFER, planetData.size() * sizeof(float), planetData.data(), GL_DYNAMIC_DRAW);
 
@@ -397,8 +472,9 @@ void Renderer::drawTrails(const std::vector<Planet>& planets, const Camera& came
         glBindBuffer(GL_ARRAY_BUFFER, trailVBO);
         glBufferData(GL_ARRAY_BUFFER, trailData.size() * sizeof(float), trailData.data(), GL_DYNAMIC_DRAW);
 
-        // Set trail color (light blue)
-        glUniform3f(trailLoc_uColor, 0.3f, 0.6f, 1.0f);
+    // Set trail color to match the planet color
+    const glm::vec3 c = planets[i].getColor();
+    glUniform3f(trailLoc_uColor, c.r, c.g, c.b);
 
         glBindVertexArray(trailVAO);
         glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(trails[i].size()));

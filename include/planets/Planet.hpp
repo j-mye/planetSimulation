@@ -3,7 +3,7 @@
 
 #include <iostream>
 #include <deque>
-// #include <cmath>
+#include <glm/vec3.hpp>
 #include "Vector2.hpp"
 
 
@@ -13,11 +13,11 @@
  */
 class Planet {
 private:
-    // Current velocity and position
     Vector2 p;
     Vector2 v;
     float mass = 1.0f;
     float radius = 1.0f;
+    glm::vec3 color = glm::vec3(0.95f, 0.98f, 1.0f); // default soft white
 
     // trail of previous positions for visualization
     std::deque<Vector2> trail;
@@ -27,7 +27,9 @@ public:
     Planet() : v{0.0f, 0.0f}, p{0.0f, 0.0f} {}
     Planet(const Vector2& initialV) : v{initialV}, p{0.0f, 0.0f} {}
     Planet(const Vector2& initialV, const Vector2& initialP) : v{initialV}, p{initialP} {}
-
+    Planet(const Vector2& initialP, const Vector2& initialV, float m, float r)
+        : v{initialV}, p{initialP}, mass{m}, radius{r} {}
+    
     float getMass() const { return mass; }
     void setMass(float m) { mass = m; }
 
@@ -40,14 +42,11 @@ public:
     const Vector2& getP() const { return p; }
     void setP(const Vector2& newP) { p = newP; }
 
-    // Record current position into the trail 
-    //  (call once per simulation frame)
     void recordPosition() {
         if (trail.size() >= maxTrailLength) trail.pop_front();
         trail.push_back(p);
     }
 
-    // accessors for trail and trail control
     const std::deque<Vector2>& getTrail() const { return trail; }
     void clearTrail() { trail.clear(); }
 
@@ -57,19 +56,21 @@ public:
         return std::sqrt(vx*vx + vy*vy);
     }
 
-    // apply a force for duration dt (F = ma -> a = F/m)
     void applyForce(const Vector2& force, float dt) {
         // acceleration = force / mass
         Vector2 acc = force / static_cast<double>(mass);
         v += acc * dt;
     }
 
-    // print planet info to console (debugging)
     void printInfo() const {
         std::cout << "Planet Position: (" << p.getX() << ", " << p.getY() << ")\n";
         std::cout << "Planet Velocity: (" << v.getX() << ", " << v.getY() << ")\n";
         std::cout << "Speed: " << getSpeed() << "  Trail length: " << trail.size() << "\n";
     }
+
+    // Color accessors
+    const glm::vec3& getColor() const { return color; }
+    void setColor(const glm::vec3& c) { color = c; }
 };
 
-#endif //PLANET_HPP
+#endif // PLANET_HPP

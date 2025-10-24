@@ -8,6 +8,9 @@ project(PlanetsProject LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Prefer config package provided by MSYS2/vcpkg for GLFW
+find_package(glfw3 CONFIG REQUIRED)
+
 # Collect all source files
 file(GLOB_RECURSE SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -47,13 +50,21 @@ target_include_directories(PlanetsProject PRIVATE
 # -------------------------------------------------------------
 # Link required libraries
 # -------------------------------------------------------------
+# Link GLFW target name varies by package; support both
+if (TARGET glfw)
+    target_link_libraries(PlanetsProject PRIVATE glfw)
+elseif (TARGET glfw3)
+    target_link_libraries(PlanetsProject PRIVATE glfw3)
+else()
+    message(FATAL_ERROR "glfw or glfw3 target not found from find_package(glfw3)")
+endif()
+
 target_link_libraries(PlanetsProject PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/lib/libglfw3dll.a"   # Link against GLFW DLL import lib
-    opengl32      # OpenGL
-    gdi32         # Windows GDI
-    user32        # Windows window/input
-    kernel32      # Base system functions
-    winmm         # Multimedia timers
+    opengl32     # OpenGL
+    gdi32        # Windows GDI
+    user32       # Windows window/input
+    kernel32     # Base system functions
+    winmm        # Multimedia timers
 )
 
 # -------------------------------------------------------------

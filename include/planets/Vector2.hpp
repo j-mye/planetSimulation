@@ -16,12 +16,9 @@ public:
     Vector2(float x, float y) : vec{x, y} {}
     Vector2(const glm::vec2& v) : vec{v} {}
 
-    // default destructor is fine (no manual delete)
-
     float getX() const { return vec.x; }
     float getY() const { return vec.y; }
 
-    // compound assignments
     Vector2& operator+=(const Vector2& other) {
         vec += other.vec;
         return *this;

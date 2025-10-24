@@ -21,11 +21,6 @@ void Simulation::update() {
 
 void Simulation::run(int steps) {
     running = true;
-    for (int i = 0; i < steps && running; ++i) {
-        update();
-        // simple console output
-        if (i % 10 == 0) printStatus();
-    }
 }
 
 void Simulation::printStatus() const {

@@ -11,12 +11,12 @@
 class PhysicsEngine {
 private:
     std::vector<Planet*> bodies;
-    double G = 6.67430e-11;
+    static constexpr double G = 6.67430e-11;
     double softening = 1e-3;
 
 public:
     PhysicsEngine() = default;
-    void setG(double g) { G = g; }
+    // void setG(double g) { G = g; }
     void setSoftening(double s) { softening = s; }
 
     void addBody(Planet* body) { bodies.push_back(body); }
