@@ -17,7 +17,7 @@ private:
     Vector2 v;
     float mass = 1.0f;
     float radius = 1.0f;
-    glm::vec3 color = glm::vec3(0.95f, 0.98f, 1.0f); // default soft white
+    glm::vec3 color = glm::vec3(0.95f, 0.98f, 1.0f);
 
     // trail of previous positions for visualization
     std::deque<Vector2> trail;
@@ -68,7 +68,6 @@ public:
         std::cout << "Speed: " << getSpeed() << "  Trail length: " << trail.size() << "\n";
     }
 
-    // Color accessors
     const glm::vec3& getColor() const { return color; }
     void setColor(const glm::vec3& c) { color = c; }
 };

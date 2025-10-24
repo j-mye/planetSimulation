@@ -50,7 +50,6 @@ void Simulation::initRandom(int N, unsigned seed) {
 }
 
 void Simulation::computeForces() {
-    // compute pairwise gravitational forces with softening
     const size_t n = planets.size();
     temp_forces.clear();
     temp_forces.resize(n, Vector2(0.0f, 0.0f));
@@ -84,7 +83,6 @@ void Simulation::step() {
 }
 
 void Simulation::update() {
-    // perform one fixed physics step
     step();
 }
 

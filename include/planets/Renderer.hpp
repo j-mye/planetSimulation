@@ -39,6 +39,12 @@ private:
     GLuint backgroundVBO;
     GLuint backgroundShaderProgram;
     
+    // Static starfield rendering
+    GLuint starVAO = 0;
+    GLuint starVBO = 0;
+    GLuint starShaderProgram = 0;
+    int starCount = 0;
+    
     // Camera system
     glm::vec2 cameraPosition;
     glm::mat4 viewMatrix;
@@ -54,6 +60,8 @@ private:
     void updateViewMatrix();
     void updateTrails(const std::vector<Planet>& planets);
     void setupInputCallbacks();
+    void initStarfield();
+    void drawStarfield();
 
 public:
     Renderer(int w, int h, const char* title);

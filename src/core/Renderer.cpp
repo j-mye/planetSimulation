@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <random>
 
 // Planet shader sources (simple, uniform-colored circular points)
 static const char* planetVertexShaderSrc = R"(
@@ -133,6 +134,30 @@ void main() {
 }
 )";
 
+// Static starfield shader sources (NDC points, not camera-transformed)
+static const char* starVertexShaderSrc = R"(
+#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec3 aColor;
+out vec3 vColor;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    gl_PointSize = 2.0; // constant small star size
+    vColor = aColor;
+}
+)";
+
+static const char* starFragmentShaderSrc = R"(
+#version 330 core
+in vec3 vColor;
+out vec4 FragColor;
+void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    float alpha = smoothstep(0.6, 0.0, d);
+    FragColor = vec4(vColor, alpha);
+}
+)";
+
 // Helper: compile shader and print errors
 static GLuint compileShader(GLenum type, const char* src) {
     GLuint shader = glCreateShader(type);
@@ -200,7 +225,7 @@ Renderer::Renderer(int w, int h, const char* title)
       backgroundVAO(0), backgroundVBO(0), backgroundShaderProgram(0),
       cameraPosition(0.0f, 0.0f), cameraZoom(1.0f),
             trailsEnabled(true), maxTrailLength(500),
-            starfieldEnabled(false),
+                        starfieldEnabled(true),
       mousePressed(false), lastMousePos(0.0f, 0.0f) {
     currentRenderer = this;
 }
@@ -327,6 +352,9 @@ bool Renderer::init() {
     // Initialize view matrix
     updateViewMatrix();
 
+    // Initialize static starfield resources
+    initStarfield();
+
     return true;
 }
 
@@ -362,20 +390,75 @@ void Renderer::drawBackground(const Camera& camera) {
     if (!starfieldEnabled) {
         return; // disabled for debugging visibility issues
     }
-    // Draw the starfield background using the provided camera
-    glUseProgram(backgroundShaderProgram);
-    glBindVertexArray(backgroundVAO);
-    {
-        GLint locCamPos  = glGetUniformLocation(backgroundShaderProgram, "uCamPos");
-        GLint locCamZoom = glGetUniformLocation(backgroundShaderProgram, "uCamZoom");
-        // Keep time uniform but we won't animate unless enabled later
-        GLint locTime    = glGetUniformLocation(backgroundShaderProgram, "uTime");
-        glm::vec2 camPos = camera.getPosition();
-        glUniform2f(locCamPos,  camPos.x, camPos.y);
-        glUniform1f(locCamZoom, camera.getZoom());
-        glUniform1f(locTime,    static_cast<float>(glfwGetTime()));
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    // Draw static starfield (NDC points)
+    (void)camera; // unused (static background)
+    drawStarfield();
+}
+
+void Renderer::initStarfield() {
+    starCount = 4000;
+    std::vector<float> data;
+    data.reserve(starCount * 5);
+
+    std::mt19937 rng(12345);
+    std::uniform_real_distribution<float> dpos(-1.0f, 1.0f);
+    std::uniform_real_distribution<float> dcol(0.75f, 1.0f);
+    std::uniform_int_distribution<int> huePick(0, 2);
+
+    for (int i = 0; i < starCount; ++i) {
+        float x = dpos(rng);
+        float y = dpos(rng);
+        int hue = huePick(rng);
+        float r = dcol(rng), g = dcol(rng), b = dcol(rng);
+
+        switch (hue) {
+            case 0: // pale blue
+                r *= 0.85f; g *= 0.92f; b *= 1.00f;
+                break;
+            case 1: // pale yellow
+                r *= 1.00f; g *= 0.95f; b *= 0.85f;
+                break;
+            case 2: // neutral white
+                r *= 0.95f; g *= 0.98f; b *= 1.00f;
+            break;
+        }
+
+        data.push_back(x);
+        data.push_back(y);
+        data.push_back(r);
+        data.push_back(g);
+        data.push_back(b);
     }
+
+    // Create VAO/VBO for stars
+    glGenVertexArrays(1, &starVAO);
+    glGenBuffers(1, &starVBO);
+
+    glBindVertexArray(starVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, starVBO);
+    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(2 * sizeof(float)));
+    glBindVertexArray(0);
+
+    // Compile starfield shader program
+    GLuint vs = compileShader(GL_VERTEX_SHADER, starVertexShaderSrc);
+    GLuint fs = compileShader(GL_FRAGMENT_SHADER, starFragmentShaderSrc);
+    starShaderProgram = linkProgram(vs, fs);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+}
+
+void Renderer::drawStarfield() {
+    if (starShaderProgram == 0 || starVAO == 0 || starCount <= 0) return;
+    glUseProgram(starShaderProgram);
+    glBindVertexArray(starVAO);
+    GLboolean depthEnabled = glIsEnabled(GL_DEPTH_TEST);
+    if (depthEnabled) glDisable(GL_DEPTH_TEST);
+    glDrawArrays(GL_POINTS, 0, starCount);
+    if (depthEnabled) glEnable(GL_DEPTH_TEST);
     glBindVertexArray(0);
     glUseProgram(0);
 }
@@ -383,31 +466,20 @@ void Renderer::drawBackground(const Camera& camera) {
 void Renderer::drawPlanets(const std::vector<Planet>& planets, const Camera& camera) {
     if (planets.empty()) return;
 
-    // Extract planet data
     std::vector<float> planetData;
-    planetData.reserve(planets.size() * 9); // pos(2) + mass(1) + velocity(3) + color(3)
-
+    planetData.reserve(planets.size() * 9); 
     for (const auto& planet : planets) {
-        // Position
         planetData.push_back(planet.getP().getX());
         planetData.push_back(planet.getP().getY());
-        
-        // Mass
         planetData.push_back(planet.getMass());
-        
-        // Velocity
         planetData.push_back(planet.getV().getX());
         planetData.push_back(planet.getV().getY());
         planetData.push_back(0.0f); // Z component (not used in 2D)
-
-        // Color
         const glm::vec3 c = planet.getColor();
         planetData.push_back(c.r);
         planetData.push_back(c.g);
         planetData.push_back(c.b);
     }
-
-    // Background is drawn separately via drawBackground(camera)
 
     // Upload planet data to GPU
     glBindBuffer(GL_ARRAY_BUFFER, planetVBO);
@@ -428,16 +500,12 @@ void Renderer::drawPlanets(const std::vector<Planet>& planets, const Camera& cam
 }
 
 void Renderer::updateTrails(const std::vector<Planet>& planets) {
-    // Resize trails vector if needed
     if (trails.size() != planets.size()) {
         trails.resize(planets.size());
     }
 
-    // Update trails for each planet
     for (size_t i = 0; i < planets.size(); ++i) {
         trails[i].push_back(planets[i].getP());
-        
-        // Limit trail length
         while (trails[i].size() > maxTrailLength) {
             trails[i].pop_front();
         }
@@ -453,34 +521,29 @@ void Renderer::drawTrails(const std::vector<Planet>& planets, const Camera& came
     glm::mat4 viewMatrix = camera.getViewMatrix();
     glUniformMatrix4fv(trailLoc_uView, 1, GL_FALSE, glm::value_ptr(viewMatrix));
 
-    // Draw trails for each planet
     for (size_t i = 0; i < trails.size() && i < planets.size(); ++i) {
         if (trails[i].size() < 2) continue;
 
-        // Prepare trail data
         std::vector<float> trailData;
-        trailData.reserve(trails[i].size() * 3); // pos(2) + age(1)
+        trailData.reserve(trails[i].size() * 3);
 
         float maxAge = static_cast<float>(trails[i].size() - 1);
         for (size_t j = 0; j < trails[i].size(); ++j) {
             trailData.push_back(trails[i][j].getX());
             trailData.push_back(trails[i][j].getY());
-            trailData.push_back(j / maxAge); // Age from 0 to 1
+            trailData.push_back(j / maxAge);
         }
 
-        // Upload and draw trail
         glBindBuffer(GL_ARRAY_BUFFER, trailVBO);
         glBufferData(GL_ARRAY_BUFFER, trailData.size() * sizeof(float), trailData.data(), GL_DYNAMIC_DRAW);
 
-    // Set trail color to match the planet color
-    const glm::vec3 c = planets[i].getColor();
-    glUniform3f(trailLoc_uColor, c.r, c.g, c.b);
+        const glm::vec3 c = planets[i].getColor();
+        glUniform3f(trailLoc_uColor, c.r, c.g, c.b);
 
         glBindVertexArray(trailVAO);
         glDrawArrays(GL_LINE_STRIP, 0, static_cast<GLsizei>(trails[i].size()));
     }
 
-    // Cleanup
     glBindVertexArray(0);
     glUseProgram(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -502,12 +565,10 @@ void Renderer::clearTrails() {
 }
 
 void Renderer::handleInput() {
-    // Handle keyboard input
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     }
 
-    // Handle arrow keys for panning
     float panSpeed = 0.01f / cameraZoom;
     if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
         pan(-panSpeed, 0.0f);
@@ -522,7 +583,6 @@ void Renderer::handleInput() {
         pan(0.0f, -panSpeed);
     }
 
-    // Handle zoom with +/- keys
     if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
         setZoom(cameraZoom * 1.05f);
     }
@@ -530,7 +590,6 @@ void Renderer::handleInput() {
         setZoom(cameraZoom * 0.95f);
     }
 
-    // Toggle trails with T key
     static bool tKeyPressed = false;
     if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS && !tKeyPressed) {
         trailsEnabled = !trailsEnabled;
@@ -541,6 +600,18 @@ void Renderer::handleInput() {
 }
 
 void Renderer::cleanup() {
+    if (starShaderProgram) {
+        glDeleteProgram(starShaderProgram);
+        starShaderProgram = 0;
+    }
+    if (starVBO) {
+        glDeleteBuffers(1, &starVBO);
+        starVBO = 0;
+    }
+    if (starVAO) {
+        glDeleteVertexArrays(1, &starVAO);
+        starVAO = 0;
+    }
     if (planetShaderProgram) {
         glDeleteProgram(planetShaderProgram);
         planetShaderProgram = 0;

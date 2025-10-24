@@ -37,7 +37,7 @@ int main() {
     cout << "  T: Toggle trails" << endl;
     cout << "  ESC: Exit" << endl;
 
-    float physicsTimeStep = 0.0015f;
+    float physicsTimeStep = 0.0016f;
     double lastTime = glfwGetTime();
     float time = 0.0f;
     
