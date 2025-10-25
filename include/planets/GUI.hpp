@@ -6,6 +6,8 @@
 #include "planets/Simulation.hpp"
 #include "Camera.hpp"
 
+class Renderer; // forward declaration
+
 /**
  * @brief GUI overlay for simulation control and statistics display
  * Uses ImGui for rendering UI elements
@@ -36,7 +38,7 @@ public:
     void shutdown();
     
     void newFrame();
-    void render(Simulation& sim, Camera& camera, float deltaTime);
+    void render(Simulation& sim, Camera& camera, Renderer& renderer, float deltaTime);
     
     // Control getters
     bool isSimulationPaused() const { return isPaused; }
@@ -50,6 +52,13 @@ public:
     // Control setters
     void setPaused(bool paused) { isPaused = paused; }
     void toggleVisibility() { visible = !visible; }
+
+    // Restart signalling for main loop (to reset accumulators, etc.)
+    bool wasRestartTriggered() const { return restartTriggered; }
+    void clearRestartFlag() { restartTriggered = false; }
+
+private:
+    bool restartTriggered = false;
 };
 
 #endif // GUI_HPP

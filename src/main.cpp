@@ -66,9 +66,13 @@ int main() {
         bool guiCapturesMouse = gui.wantsCaptureMouse();
 
         // Compute simulation viewport (right side of window) based on GUI panel width
-        int fbW = 0, fbH = 0;
-        glfwGetFramebufferSize(window, &fbW, &fbH);
-        int simLeft = gui.isVisible() ? gui.getPanelWidth() : 0;
+        int fbW = 0, fbH = 0; glfwGetFramebufferSize(window, &fbW, &fbH);
+        int winW = 0, winH = 0; glfwGetWindowSize(window, &winW, &winH);
+        float xscale = (winW > 0) ? (float)fbW / (float)winW : 1.0f;
+        int simLeft = 0;
+        if (gui.isVisible()) {
+            simLeft = (int)std::round(gui.getPanelWidth() * xscale);
+        }
         int simBottom = 0;
         int simWidth = std::max(0, fbW - simLeft);
         int simHeight = fbH;
@@ -113,18 +117,29 @@ int main() {
         }
 
         // Advance physics using fixed-step accumulator for wide-range time scaling
-        if (!gui.isSimulationPaused()) {
+        {
             static double accumulator = 0.0;
-            const float simDt = sim.getTimeStep();
-            const float scaled = deltaTime * gui.getTimeScale();
-            accumulator += scaled;
+            if (gui.wasRestartTriggered()) {
+                accumulator = 0.0; // avoid heavy catch-up after restart
+                gui.clearRestartFlag();
+            }
 
-            int substeps = 0;
-            const int maxSubstepsPerFrame = 500;
-            while (accumulator >= simDt && substeps < maxSubstepsPerFrame) {
-                sim.step();
-                accumulator -= simDt;
-                ++substeps;
+            if (!gui.isSimulationPaused()) {
+                const float simDt = sim.getTimeStep();
+                const float scaled = deltaTime * gui.getTimeScale();
+                accumulator += scaled;
+
+                // Clamp accumulator to prevent spiral of death on slow frames
+                const double maxAccum = 0.25; // seconds
+                if (accumulator > maxAccum) accumulator = maxAccum;
+
+                int substeps = 0;
+                const int maxSubstepsPerFrame = 500;
+                while (accumulator >= simDt && substeps < maxSubstepsPerFrame) {
+                    sim.step();
+                    accumulator -= simDt;
+                    ++substeps;
+                }
             }
         }
 
@@ -175,7 +190,7 @@ int main() {
         
         // Reset viewport to full window for GUI draw
         glViewport(0, 0, fbW, fbH);
-        gui.render(sim, camera, deltaTime);
+        gui.render(sim, camera, renderer, deltaTime);
     
         renderer.endFrame();
         time += deltaTime;

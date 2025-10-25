@@ -1,3 +1,4 @@
+#include "planets/Renderer.hpp"
 #include "planets/GUI.hpp"
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
@@ -50,7 +51,7 @@ void GUI::newFrame() {
     ImGui::NewFrame();
 }
 
-void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
+void GUI::render(Simulation& sim, Camera& camera, Renderer& renderer, float deltaTime) {
     if (!visible) {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -188,8 +189,11 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
             if (ImGui::Button("Reinitialize (12 bodies)", ImVec2(-1, 0))) {
                 sim.initRandom(12, static_cast<unsigned>(ImGui::GetTime() * 1000));
-                // Clear trails immediately after reinitializing to avoid visual ghosting
+                // Clear both renderer-managed trails and per-planet trails
+                renderer.clearTrails();
                 for (auto &p : sim.getPlanets()) p.clearTrail();
+                camera.reset();
+                restartTriggered = true;
             }
             
             static int bodyCount = 20;
@@ -198,8 +202,10 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
             
             if (ImGui::Button("Create Custom Simulation", ImVec2(-1, 0))) {
                 sim.initRandom(bodyCount, static_cast<unsigned>(ImGui::GetTime() * 1000));
-                // Clear trails so newly spawned bodies don't inherit previous trails
+                renderer.clearTrails();
                 for (auto &p : sim.getPlanets()) p.clearTrail();
+                camera.reset();
+                restartTriggered = true;
             }
         }
         
