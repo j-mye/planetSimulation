@@ -58,11 +58,32 @@ int main() {
         float deltaTime = static_cast<float>(now - lastTime);
         lastTime = now;
 
-        // Handle input
-        GLFWwindow* window = renderer.getWindow();
-        renderer.handleInput();
+    // Handle input
+    GLFWwindow* window = renderer.getWindow();
         
-        // GUI controls
+        // Query whether GUI wants input focus; if so, defer most shortcuts and camera input
+        bool guiCapturesKeyboard = gui.wantsCaptureKeyboard();
+        bool guiCapturesMouse = gui.wantsCaptureMouse();
+
+        // Compute simulation viewport (right side of window) based on GUI panel width
+        int fbW = 0, fbH = 0;
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        int simLeft = gui.isVisible() ? gui.getPanelWidth() : 0;
+        int simBottom = 0;
+        int simWidth = std::max(0, fbW - simLeft);
+        int simHeight = fbH;
+
+        // Apply viewport to the renderer for input hit-testing
+        // (Rendering will set viewport before drawing)
+        renderer.setViewportRect(simLeft, simBottom, simWidth, simHeight);
+        // Defer renderer keyboard/mouse input handling if GUI is capturing inputs
+        if (!guiCapturesKeyboard && !guiCapturesMouse) {
+            renderer.handleInput();
+        }
+
+    // GUI toggle (H) should always be available
+        
+    // GUI controls
         static bool hKeyPressed = false;
         if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS && !hKeyPressed) {
             gui.toggleVisibility();
@@ -71,78 +92,90 @@ int main() {
             hKeyPressed = false;
         }
         
-        static bool spaceKeyPressed = false;
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !spaceKeyPressed) {
-            gui.setPaused(!gui.isSimulationPaused());
-            std::cout << "Simulation " << (gui.isSimulationPaused() ? "paused" : "resumed") << std::endl;
-            spaceKeyPressed = true;
-        } else if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE) {
-            spaceKeyPressed = false;
-        }
-        
-        static bool cKeyPressed = false;
-        if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !cKeyPressed) {
-            renderer.clearTrails();
-            std::cout << "Trails cleared" << std::endl;
-            cKeyPressed = true;
-        } else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
-            cKeyPressed = false;
+        if (!guiCapturesKeyboard) {
+            static bool spaceKeyPressed = false;
+            if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !spaceKeyPressed) {
+                gui.setPaused(!gui.isSimulationPaused());
+                std::cout << "Simulation " << (gui.isSimulationPaused() ? "paused" : "resumed") << std::endl;
+                spaceKeyPressed = true;
+            } else if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE) {
+                spaceKeyPressed = false;
+            }
+            
+            static bool cKeyPressed = false;
+            if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !cKeyPressed) {
+                renderer.clearTrails();
+                std::cout << "Trails cleared" << std::endl;
+                cKeyPressed = true;
+            } else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
+                cKeyPressed = false;
+            }
         }
 
-        // Advance physics (only if not paused, with time scale)
+        // Advance physics using fixed-step accumulator for wide-range time scaling
         if (!gui.isSimulationPaused()) {
-            float timeScale = gui.getTimeScale();
-            int steps = static_cast<int>(timeScale);
-            if (steps < 1) steps = 1;
-            
-            for (int i = 0; i < steps; ++i) {
+            static double accumulator = 0.0;
+            const float simDt = sim.getTimeStep();
+            const float scaled = deltaTime * gui.getTimeScale();
+            accumulator += scaled;
+
+            int substeps = 0;
+            const int maxSubstepsPerFrame = 500;
+            while (accumulator >= simDt && substeps < maxSubstepsPerFrame) {
                 sim.step();
+                accumulator -= simDt;
+                ++substeps;
             }
         }
 
         // Camera follows simulation planets
         camera.update(sim.getPlanets(), deltaTime);
-        
-        // Manual camera controls
-        if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
-            camera.zoomBy(1.05f);
-        }
-        if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
-            camera.zoomBy(0.95f);
-        }
-        
-        float panSpeed = 0.01f / camera.getZoom();
-        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-            camera.pan(-panSpeed, 0.0f);
-        }
-        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-            camera.pan(panSpeed, 0.0f);
-        }
-        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-            camera.pan(0.0f, panSpeed);
-        }
-        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-            camera.pan(0.0f, -panSpeed);
-        }
-        
-        static bool zKeyPressed = false;
-        if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS && !zKeyPressed) {
-            camera.setAutoZoom(!camera.isAutoZoomEnabled());
-            std::cout << "Auto-zoom " << (camera.isAutoZoomEnabled() ? "enabled" : "disabled") << std::endl;
-            zKeyPressed = true;
-        } else if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_RELEASE) {
-            zKeyPressed = false;
+        // Manual camera controls (only when GUI is not capturing keyboard input)
+        if (!guiCapturesKeyboard) {
+            if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
+                camera.zoomBy(1.05f);
+            }
+            if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
+                camera.zoomBy(0.95f);
+            }
+
+            float panSpeed = 0.01f / camera.getZoom();
+            if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+                camera.pan(-panSpeed, 0.0f);
+            }
+            if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+                camera.pan(panSpeed, 0.0f);
+            }
+            if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+                camera.pan(0.0f, panSpeed);
+            }
+            if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+                camera.pan(0.0f, -panSpeed);
+            }
+
+            static bool zKeyPressed = false;
+            if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS && !zKeyPressed) {
+                camera.setAutoZoom(!camera.isAutoZoomEnabled());
+                std::cout << "Auto-zoom " << (camera.isAutoZoomEnabled() ? "enabled" : "disabled") << std::endl;
+                zKeyPressed = true;
+            } else if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_RELEASE) {
+                zKeyPressed = false;
+            }
         }
         
         // Render
         gui.newFrame();
 
-    renderer.beginFrame();
-    renderer.drawBackground(camera);
-    renderer.drawTrails(sim.getPlanets(), camera);
-    renderer.drawPlanets(sim.getPlanets(), camera);
-    
-    gui.render(sim, camera, deltaTime);
+        renderer.beginFrame();
+        // Set viewport for simulation drawing (right pane)
+        glViewport(simLeft, simBottom, simWidth, simHeight);
+        renderer.drawBackground(camera);
+        renderer.drawTrails(sim.getPlanets(), camera);
+        renderer.drawPlanets(sim.getPlanets(), camera);
+        
+        // Reset viewport to full window for GUI draw
+        glViewport(0, 0, fbW, fbH);
+        gui.render(sim, camera, deltaTime);
     
         renderer.endFrame();
         time += deltaTime;

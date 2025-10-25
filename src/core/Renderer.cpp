@@ -197,14 +197,21 @@ static Renderer* currentRenderer = nullptr;
 static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (currentRenderer) {
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            currentRenderer->mousePressed = (action == GLFW_PRESS);
+            // Only start panning if press occurs inside simulation viewport
+            if (action == GLFW_PRESS) {
+                double x, y; glfwGetCursorPos(window, &x, &y);
+                currentRenderer->mousePressed = currentRenderer->isInsideViewport(x, y);
+                currentRenderer->lastMousePos = glm::vec2((float)x, (float)y);
+            } else if (action == GLFW_RELEASE) {
+                currentRenderer->mousePressed = false;
+            }
         }
     }
 }
 
 static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     if (currentRenderer && currentRenderer->mousePressed) {
-        glm::vec2 currentMousePos(xpos, ypos);
+        glm::vec2 currentMousePos((float)xpos, (float)ypos);
         glm::vec2 delta = currentMousePos - currentRenderer->lastMousePos;
         currentRenderer->pan(delta.x * 0.01f, -delta.y * 0.01f);
         currentRenderer->lastMousePos = currentMousePos;
@@ -213,8 +220,12 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
 
 static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
     if (currentRenderer) {
-        float zoomFactor = 1.0f + yoffset * 0.1f;
-        currentRenderer->setZoom(currentRenderer->cameraZoom * zoomFactor);
+        // Zoom only if cursor is inside simulation viewport
+        double x, y; glfwGetCursorPos(window, &x, &y);
+        if (currentRenderer->isInsideViewport(x, y)) {
+            float zoomFactor = 1.0f + (float)yoffset * 0.1f;
+            currentRenderer->setZoom(currentRenderer->cameraZoom * zoomFactor);
+        }
     }
 }
 
@@ -656,3 +667,11 @@ void Renderer::cleanup() {
 }
 
 // debug bounds drawing removed
+
+bool Renderer::isInsideViewport(double xWindow, double yWindow) const {
+    // Convert window-space y (origin top-left) to framebuffer-space bottom-left
+    int fbW, fbH; glfwGetFramebufferSize(window, &fbW, &fbH);
+    double yBL = (double)fbH - yWindow;
+    return (xWindow >= vpLeft && xWindow < (vpLeft + vpWidth) &&
+            yBL     >= vpBottom && yBL    < (vpBottom + vpHeight));
+}

@@ -2,10 +2,8 @@
 #define GUI_HPP
 
 #include <GLFW/glfw3.h>
-#include <vector>
 #include <deque>
-#include "Planet.hpp"
-#include "Simulation.hpp"
+#include "planets/Simulation.hpp"
 #include "Camera.hpp"
 
 /**
@@ -16,6 +14,7 @@ class GUI {
 private:
     GLFWwindow* window;
     bool visible = true;
+    static constexpr int PANEL_WIDTH = 320; // fixed left-column width
     
     // FPS tracking
     std::deque<float> fpsHistory;
@@ -43,6 +42,10 @@ public:
     bool isSimulationPaused() const { return isPaused; }
     float getTimeScale() const { return timeScale; }
     bool isVisible() const { return visible; }
+    int getPanelWidth() const { return PANEL_WIDTH; }
+    // Ask whether ImGui currently wants to capture keyboard input
+    bool wantsCaptureKeyboard() const;
+    bool wantsCaptureMouse() const;
     
     // Control setters
     void setPaused(bool paused) { isPaused = paused; }

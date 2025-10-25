@@ -18,6 +18,8 @@ private:
     int width;
     int height;
     GLFWwindow* window;
+    // Active simulation viewport (in framebuffer pixels, origin bottom-left)
+    int vpLeft = 0, vpBottom = 0, vpWidth = 0, vpHeight = 0;
     
     // Planet rendering
     GLuint planetVAO;
@@ -83,6 +85,8 @@ public:
     bool areTrailsEnabled() const { return trailsEnabled; }
     void clearTrails();
     void handleInput();
+    void setViewportRect(int left, int bottom, int width, int height) { vpLeft = left; vpBottom = bottom; vpWidth = width; vpHeight = height; }
+    bool isInsideViewport(double xWindow, double yWindow) const;
     
     // Background control
     void setStarfieldEnabled(bool enabled) { starfieldEnabled = enabled; }

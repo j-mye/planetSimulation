@@ -28,7 +28,11 @@ public:
     glm::vec2 getTarget() const { return target; }
     void setAutoZoom(bool enabled) { autoZoom = enabled; }
     bool isAutoZoomEnabled() const { return autoZoom; }
-    void reset(); // Reset to initial state
+    void reset();
+
+    // Auto-zoom outlier exclusion controls
+    void setOutlierMultiplier(float m) { outlierMultiplier = std::max(1.0f, m); }
+    float getOutlierMultiplier() const { return outlierMultiplier; }
 
 private:
     glm::vec2 position, target;
@@ -37,9 +41,11 @@ private:
     float aspect;
     bool autoZoom;
     bool initialized = false; // snap on first update
+    float outlierMultiplier = 3.0f; // Exclude bodies farther than m * median distance
 
     glm::vec2 computeCenterOfMass(const std::vector<Planet>& planets) const;
     float computeOptimalZoom(const std::vector<Planet>& planets) const;
+    void computeInliers(const std::vector<Planet>& planets, std::vector<size_t>& indices) const;
 };
 
 #endif // CAMERA_HPP

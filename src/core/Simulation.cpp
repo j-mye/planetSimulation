@@ -1,6 +1,7 @@
 #include "planets/Simulation.hpp"
 #include <iostream>
 #include <random>
+#include <algorithm>
 
 void Simulation::init() {
     planets.clear();
@@ -78,95 +79,67 @@ void Simulation::integrate() {
 
 void Simulation::handleCollisions() {
     if (!enableCollisions || planets.size() < 2) return;
+    // Collision handling using impulse-based mostly-elastic response with positional correction.
+    // Collisions occur when distance <= sum of radii. We compute an impulse along the
+    // collision normal and apply a restitution factor (collisionDamping) to simulate
+    // mild energy loss. We also apply a position correction to resolve penetration.
 
-    std::vector<bool> merged(planets.size(), false);
-
+    const float EPS = 1e-5f;
     for (size_t i = 0; i < planets.size(); ++i) {
-        if (merged[i]) continue;
-
         for (size_t j = i + 1; j < planets.size(); ++j) {
-            if (merged[j]) continue;
+            Planet& A = planets[i];
+            Planet& B = planets[j];
 
-            Planet& a = planets[i];
-            Planet& b = planets[j];
-
-            // Check collision: distance < sum of radii
-            Vector2 diff = b.getP() - a.getP();
+            Vector2 diff = B.getP() - A.getP();
             float dist = diff.length();
-            float radSum = a.getRadius() + b.getRadius();
+            float rA = A.getRadius();
+            float rB = B.getRadius();
+            float minDist = rA + rB;
 
-            if (dist < radSum && dist > 1e-6f) {
-                // Collision detected
-                Vector2 normal = diff.normalized();
-                Vector2 relVel = b.getV() - a.getV();
-                float relVelMag = relVel.length();
+            // If not overlapping, skip
+            if (dist > minDist) continue;
 
-                // Check if merging conditions are met
-                if (enableMerging && relVelMag < mergeVelocityThreshold) {
-                    // Merge: conserve momentum and mass
-                    float m1 = a.getMass();
-                    float m2 = b.getMass();
-                    float totalMass = m1 + m2;
-
-                    // New velocity (momentum conservation)
-                    Vector2 newVel = (a.getV() * m1 + b.getV() * m2) / totalMass;
-
-                    // New position (center of mass)
-                    Vector2 newPos = (a.getP() * m1 + b.getP() * m2) / totalMass;
-
-                    // New radius (volume conservation: V = 4/3 π r³)
-                    float r1 = a.getRadius();
-                    float r2 = b.getRadius();
-                    float newRadius = std::pow(r1*r1*r1 + r2*r2*r2, 1.0f/3.0f);
-
-                    // Blend colors by mass
-                    glm::vec3 c1 = a.getColor();
-                    glm::vec3 c2 = b.getColor();
-                    glm::vec3 newColor = (c1 * m1 + c2 * m2) / totalMass;
-
-                    // Update planet a with merged properties
-                    a.setMass(totalMass);
-                    a.setRadius(newRadius);
-                    a.setP(newPos);
-                    a.setV(newVel);
-                    a.setColor(newColor);
-
-                    // Mark planet b for removal
-                    merged[j] = true;
-                } else {
-                    // Elastic/inelastic collision response
-                    // Relative velocity along collision normal
-                    float vn = (relVel.getX() * normal.getX() + relVel.getY() * normal.getY());
-
-                    // Don't resolve if moving apart
-                    if (vn > 0.0f) continue;
-
-                    // Impulse magnitude using coefficient of restitution
-                    float m1 = a.getMass();
-                    float m2 = b.getMass();
-                    float impulse = -(1.0f + restitution) * vn / (1.0f/m1 + 1.0f/m2);
-
-                    // Apply impulse
-                    Vector2 impulseVec = normal * impulse;
-                    a.setV(a.getV() - impulseVec / m1);
-                    b.setV(b.getV() + impulseVec / m2);
-
-                    // Separate bodies to prevent overlap
-                    float overlap = radSum - dist;
-                    float separationA = overlap * (m2 / (m1 + m2));
-                    float separationB = overlap * (m1 / (m1 + m2));
-                    a.setP(a.getP() - normal * separationA);
-                    b.setP(b.getP() + normal * separationB);
-                }
+            // Avoid division by zero
+            if (dist < EPS) {
+                // Nudge slightly along arbitrary axis
+                diff = Vector2(EPS, 0.0f);
+                dist = EPS;
             }
-        }
-    }
 
-    // Remove merged planets
-    if (enableMerging) {
-        for (int i = static_cast<int>(planets.size()) - 1; i >= 0; --i) {
-            if (merged[i]) {
-                planets.erase(planets.begin() + i);
+            // Normal from A to B
+            Vector2 normal = diff / dist;
+
+            // Relative velocity along normal
+            Vector2 relVel = B.getV() - A.getV();
+            float velAlongNormal = relVel.getX() * normal.getX() + relVel.getY() * normal.getY();
+
+            // Compute restitution (use collisionDamping as restitution factor between 0..1)
+            float e = std::clamp(collisionDamping, 0.0f, 1.0f);
+
+            // Compute impulse scalar
+            float mA = A.getMass();
+            float mB = B.getMass();
+            float invMassA = (mA > 0.0f) ? 1.0f / mA : 0.0f;
+            float invMassB = (mB > 0.0f) ? 1.0f / mB : 0.0f;
+
+            // Only apply impulse if bodies are moving towards each other or overlapping
+            if (velAlongNormal < 0.0f) {
+                float jImpulse = -(1.0f + e) * velAlongNormal / (invMassA + invMassB);
+                Vector2 impulse = normal * jImpulse;
+
+                // Apply velocity change
+                A.setV(A.getV() - impulse * invMassA);
+                B.setV(B.getV() + impulse * invMassB);
+            }
+
+            // Positional correction to resolve penetration (baumgarte-style)
+            const float percent = 0.8f; // usually 20% to 80%
+            const float slop = 0.01f;   // penetration allowance
+            float penetration = std::max(minDist - dist - slop, 0.0f);
+            if (penetration > 0.0f) {
+                Vector2 correction = normal * (penetration / (invMassA + invMassB) * percent);
+                A.setP(A.getP() - correction * invMassA);
+                B.setP(B.getP() + correction * invMassB);
             }
         }
     }

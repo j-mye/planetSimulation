@@ -16,11 +16,10 @@ private:
     float G = 0.05f;
     float softening = 0.02f;
 
-    // Collision physics
-    float restitution = 0.8f; // coefficient of restitution (0=inelastic, 1=elastic)
+    // Soft collision physics (repulsive force-based)
+    float collisionStrength = 0.5f; // strength of repulsive force
+    float collisionDamping = 0.95f; // velocity damping during collision (0.9-0.99)
     bool enableCollisions = true;
-    bool enableMerging = true;
-    float mergeVelocityThreshold = 0.05f; // merge if relative velocity below this
 
     // Internal helpers
     void computeForces();
@@ -44,16 +43,17 @@ public:
     void printStatus() const;
     std::vector<Planet>& getPlanets() { return planets; }
     void setTimeStep(float dt) { deltaTime = dt; }
+    float getTimeStep() const { return deltaTime; }
     void setGravityParams(float g, float eps) { G = g; softening = eps; }
     std::pair<float, float> getGravityParams() const { return {G, softening}; }
 
     // Collision controls
-    void setRestitution(float r) { restitution = r; }
-    float getRestitution() const { return restitution; }
+    void setCollisionStrength(float strength) { collisionStrength = strength; }
+    float getCollisionStrength() const { return collisionStrength; }
+    void setCollisionDamping(float damping) { collisionDamping = damping; }
+    float getCollisionDamping() const { return collisionDamping; }
     void setCollisionsEnabled(bool enabled) { enableCollisions = enabled; }
     bool areCollisionsEnabled() const { return enableCollisions; }
-    void setMergingEnabled(bool enabled) { enableMerging = enabled; }
-    bool isMergingEnabled() const { return enableMerging; }
 
     // (removed) bounds API
 };

@@ -33,6 +33,11 @@ bool GUI::init(GLFWwindow* win) {
     return true;
 }
 
+bool GUI::wantsCaptureKeyboard() const {
+    ImGuiIO& io = ImGui::GetIO();
+    return io.WantCaptureKeyboard;
+}
+
 void GUI::shutdown() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
@@ -63,11 +68,13 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
     auto& planets = sim.getPlanets();
     lastPlanetCount = static_cast<int>(planets.size());
     
-    // Main control window
-    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 400), ImGuiCond_FirstUseEver);
+    // Main control window pinned to left column with fixed width
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2((float)PANEL_WIDTH, io.DisplaySize.y));
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse;
     
-    if (ImGui::Begin("Simulation Control", &visible)) {
+    if (ImGui::Begin("Simulation Control", &visible, flags)) {
         // === STATS SECTION ===
         if (ImGui::CollapsingHeader("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("FPS: %.1f", lastFPS);
@@ -130,8 +137,8 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
                 camera.reset();
             }
             
-            // Time scale
-            ImGui::SliderFloat("Time Scale", &timeScale, 0.1f, 5.0f, "%.2f");
+            // Time scale (logarithmic slider for wide range)
+            ImGui::SliderFloat("Time Scale", &timeScale, 0.001f, 200.0f, "%.3f x", ImGuiSliderFlags_Logarithmic);
             
             ImGui::Separator();
             
@@ -155,14 +162,22 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
             }
             
             if (collisionsEnabled) {
-                bool mergingEnabled = sim.isMergingEnabled();
-                if (ImGui::Checkbox("Enable Merging", &mergingEnabled)) {
-                    sim.setMergingEnabled(mergingEnabled);
+                ImGui::Text("Soft Collision Settings:");
+                
+                float collisionStrength = sim.getCollisionStrength();
+                if (ImGui::SliderFloat("Repulsion Strength", &collisionStrength, 0.1f, 2.0f, "%.2f")) {
+                    sim.setCollisionStrength(collisionStrength);
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Higher values = stronger push when planets touch");
                 }
                 
-                float restitution = sim.getRestitution();
-                if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f")) {
-                    sim.setRestitution(restitution);
+                float collisionDamping = sim.getCollisionDamping();
+                if (ImGui::SliderFloat("Collision Damping", &collisionDamping, 0.85f, 0.99f, "%.3f")) {
+                    sim.setCollisionDamping(collisionDamping);
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Lower values = more energy loss during contact");
                 }
             }
         }
@@ -173,6 +188,8 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
         if (ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
             if (ImGui::Button("Reinitialize (12 bodies)", ImVec2(-1, 0))) {
                 sim.initRandom(12, static_cast<unsigned>(ImGui::GetTime() * 1000));
+                // Clear trails immediately after reinitializing to avoid visual ghosting
+                for (auto &p : sim.getPlanets()) p.clearTrail();
             }
             
             static int bodyCount = 20;
@@ -181,6 +198,8 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
             
             if (ImGui::Button("Create Custom Simulation", ImVec2(-1, 0))) {
                 sim.initRandom(bodyCount, static_cast<unsigned>(ImGui::GetTime() * 1000));
+                // Clear trails so newly spawned bodies don't inherit previous trails
+                for (auto &p : sim.getPlanets()) p.clearTrail();
             }
         }
         
@@ -203,6 +222,14 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
             }
             ImGui::SameLine();
             ImGui::Text("Zoom Controls");
+
+            float outlierMult = camera.getOutlierMultiplier();
+            if (ImGui::SliderFloat("Outlier Multiplier", &outlierMult, 1.0f, 10.0f, "%.1f x")) {
+                camera.setOutlierMultiplier(outlierMult);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Exclude planets farther than this multiple of the median distance to COM from auto-zoom");
+            }
         }
         
         ImGui::Spacing();
@@ -214,4 +241,9 @@ void GUI::render(Simulation& sim, Camera& camera, float deltaTime) {
     // Render ImGui
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+bool GUI::wantsCaptureMouse() const {
+    ImGuiIO& io = ImGui::GetIO();
+    return io.WantCaptureMouse;
 }
