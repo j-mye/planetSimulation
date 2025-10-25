@@ -28,6 +28,7 @@ public:
     glm::vec2 getTarget() const { return target; }
     void setAutoZoom(bool enabled) { autoZoom = enabled; }
     bool isAutoZoomEnabled() const { return autoZoom; }
+    void reset(); // Reset to initial state
 
 private:
     glm::vec2 position, target;

@@ -9,6 +9,7 @@
 #include "planets/Vector2.hpp"
 #include "planets/Camera.hpp"
 #include "planets/Simulation.hpp"
+#include "planets/GUI.hpp"
 
 using namespace std;
 
@@ -20,6 +21,13 @@ int main() {
     }
 
     Camera camera(1280.0f, 720.0f);
+
+    // Initialize GUI
+    GUI gui;
+    if (!gui.init(renderer.getWindow())) {
+        std::cerr << "Failed to initialize GUI" << endl;
+        return -1;
+    }
 
     // Create simulation and initial random bodies
     Simulation sim;
@@ -35,25 +43,67 @@ int main() {
     cout << "  +/-: Zoom in/out" << endl;
     cout << "  Z: Toggle auto-zoom (keeps all planets visible)" << endl;
     cout << "  T: Toggle trails" << endl;
+    cout << "  H: Toggle GUI panel" << endl;
+    cout << "  C: Clear trails" << endl;
+    cout << "  SPACE: Pause/Resume simulation" << endl;
     cout << "  ESC: Exit" << endl;
 
     float physicsTimeStep = 0.0016f;
     double lastTime = glfwGetTime();
     float time = 0.0f;
     
+    
     while (!renderer.shouldClose()) {
         double now = glfwGetTime();
         float deltaTime = static_cast<float>(now - lastTime);
         lastTime = now;
 
-        // advance physics (fixed step)
-        sim.step();
-
-        // camera follows simulation planets
-        camera.update(sim.getPlanets(), deltaTime);
+        // Handle input
+        GLFWwindow* window = renderer.getWindow();
         renderer.handleInput();
         
-    GLFWwindow* window = renderer.getWindow();
+        // GUI controls
+        static bool hKeyPressed = false;
+        if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS && !hKeyPressed) {
+            gui.toggleVisibility();
+            hKeyPressed = true;
+        } else if (glfwGetKey(window, GLFW_KEY_H) == GLFW_RELEASE) {
+            hKeyPressed = false;
+        }
+        
+        static bool spaceKeyPressed = false;
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !spaceKeyPressed) {
+            gui.setPaused(!gui.isSimulationPaused());
+            std::cout << "Simulation " << (gui.isSimulationPaused() ? "paused" : "resumed") << std::endl;
+            spaceKeyPressed = true;
+        } else if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE) {
+            spaceKeyPressed = false;
+        }
+        
+        static bool cKeyPressed = false;
+        if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !cKeyPressed) {
+            renderer.clearTrails();
+            std::cout << "Trails cleared" << std::endl;
+            cKeyPressed = true;
+        } else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
+            cKeyPressed = false;
+        }
+
+        // Advance physics (only if not paused, with time scale)
+        if (!gui.isSimulationPaused()) {
+            float timeScale = gui.getTimeScale();
+            int steps = static_cast<int>(timeScale);
+            if (steps < 1) steps = 1;
+            
+            for (int i = 0; i < steps; ++i) {
+                sim.step();
+            }
+        }
+
+        // Camera follows simulation planets
+        camera.update(sim.getPlanets(), deltaTime);
+        
+        // Manual camera controls
         if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
             camera.zoomBy(1.05f);
         }
@@ -84,14 +134,21 @@ int main() {
             zKeyPressed = false;
         }
         
+        // Render
+        gui.newFrame();
+
     renderer.beginFrame();
     renderer.drawBackground(camera);
     renderer.drawTrails(sim.getPlanets(), camera);
     renderer.drawPlanets(sim.getPlanets(), camera);
+    
+    gui.render(sim, camera, deltaTime);
+    
         renderer.endFrame();
         time += deltaTime;
     }
     
+    gui.shutdown();
     renderer.cleanup();    
     cout << "Simulation ended after " << time << " seconds" << endl;
     return 0;

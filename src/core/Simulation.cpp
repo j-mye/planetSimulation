@@ -76,10 +76,107 @@ void Simulation::integrate() {
     }
 }
 
+void Simulation::handleCollisions() {
+    if (!enableCollisions || planets.size() < 2) return;
+
+    std::vector<bool> merged(planets.size(), false);
+
+    for (size_t i = 0; i < planets.size(); ++i) {
+        if (merged[i]) continue;
+
+        for (size_t j = i + 1; j < planets.size(); ++j) {
+            if (merged[j]) continue;
+
+            Planet& a = planets[i];
+            Planet& b = planets[j];
+
+            // Check collision: distance < sum of radii
+            Vector2 diff = b.getP() - a.getP();
+            float dist = diff.length();
+            float radSum = a.getRadius() + b.getRadius();
+
+            if (dist < radSum && dist > 1e-6f) {
+                // Collision detected
+                Vector2 normal = diff.normalized();
+                Vector2 relVel = b.getV() - a.getV();
+                float relVelMag = relVel.length();
+
+                // Check if merging conditions are met
+                if (enableMerging && relVelMag < mergeVelocityThreshold) {
+                    // Merge: conserve momentum and mass
+                    float m1 = a.getMass();
+                    float m2 = b.getMass();
+                    float totalMass = m1 + m2;
+
+                    // New velocity (momentum conservation)
+                    Vector2 newVel = (a.getV() * m1 + b.getV() * m2) / totalMass;
+
+                    // New position (center of mass)
+                    Vector2 newPos = (a.getP() * m1 + b.getP() * m2) / totalMass;
+
+                    // New radius (volume conservation: V = 4/3 π r³)
+                    float r1 = a.getRadius();
+                    float r2 = b.getRadius();
+                    float newRadius = std::pow(r1*r1*r1 + r2*r2*r2, 1.0f/3.0f);
+
+                    // Blend colors by mass
+                    glm::vec3 c1 = a.getColor();
+                    glm::vec3 c2 = b.getColor();
+                    glm::vec3 newColor = (c1 * m1 + c2 * m2) / totalMass;
+
+                    // Update planet a with merged properties
+                    a.setMass(totalMass);
+                    a.setRadius(newRadius);
+                    a.setP(newPos);
+                    a.setV(newVel);
+                    a.setColor(newColor);
+
+                    // Mark planet b for removal
+                    merged[j] = true;
+                } else {
+                    // Elastic/inelastic collision response
+                    // Relative velocity along collision normal
+                    float vn = (relVel.getX() * normal.getX() + relVel.getY() * normal.getY());
+
+                    // Don't resolve if moving apart
+                    if (vn > 0.0f) continue;
+
+                    // Impulse magnitude using coefficient of restitution
+                    float m1 = a.getMass();
+                    float m2 = b.getMass();
+                    float impulse = -(1.0f + restitution) * vn / (1.0f/m1 + 1.0f/m2);
+
+                    // Apply impulse
+                    Vector2 impulseVec = normal * impulse;
+                    a.setV(a.getV() - impulseVec / m1);
+                    b.setV(b.getV() + impulseVec / m2);
+
+                    // Separate bodies to prevent overlap
+                    float overlap = radSum - dist;
+                    float separationA = overlap * (m2 / (m1 + m2));
+                    float separationB = overlap * (m1 / (m1 + m2));
+                    a.setP(a.getP() - normal * separationA);
+                    b.setP(b.getP() + normal * separationB);
+                }
+            }
+        }
+    }
+
+    // Remove merged planets
+    if (enableMerging) {
+        for (int i = static_cast<int>(planets.size()) - 1; i >= 0; --i) {
+            if (merged[i]) {
+                planets.erase(planets.begin() + i);
+            }
+        }
+    }
+}
+
 void Simulation::step() {
     if (planets.empty()) return;
     computeForces();
     integrate();
+    handleCollisions();
 }
 
 void Simulation::update() {

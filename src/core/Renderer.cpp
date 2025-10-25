@@ -654,3 +654,5 @@ void Renderer::cleanup() {
     }
     glfwTerminate();
 }
+
+// debug bounds drawing removed

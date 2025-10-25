@@ -16,9 +16,16 @@ private:
     float G = 0.05f;
     float softening = 0.02f;
 
+    // Collision physics
+    float restitution = 0.8f; // coefficient of restitution (0=inelastic, 1=elastic)
+    bool enableCollisions = true;
+    bool enableMerging = true;
+    float mergeVelocityThreshold = 0.05f; // merge if relative velocity below this
+
     // Internal helpers
     void computeForces();
     void integrate();
+    void handleCollisions();
     std::vector<Vector2> temp_forces;
 
 public:
@@ -38,6 +45,17 @@ public:
     std::vector<Planet>& getPlanets() { return planets; }
     void setTimeStep(float dt) { deltaTime = dt; }
     void setGravityParams(float g, float eps) { G = g; softening = eps; }
+    std::pair<float, float> getGravityParams() const { return {G, softening}; }
+
+    // Collision controls
+    void setRestitution(float r) { restitution = r; }
+    float getRestitution() const { return restitution; }
+    void setCollisionsEnabled(bool enabled) { enableCollisions = enabled; }
+    bool areCollisionsEnabled() const { return enableCollisions; }
+    void setMergingEnabled(bool enabled) { enableMerging = enabled; }
+    bool isMergingEnabled() const { return enableMerging; }
+
+    // (removed) bounds API
 };
 
 #endif //SIMULATION_HPP

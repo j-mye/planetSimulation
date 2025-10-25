@@ -126,3 +126,10 @@ float Camera::computeOptimalZoom(const std::vector<Planet>& planets) const {
     // Clamp to reasonable bounds
     return std::clamp(optimalZoom, 0.0005f, 100.0f);
 }
+
+void Camera::reset() {
+    position = glm::vec2(0.0f, 0.0f);
+    target = glm::vec2(0.0f, 0.0f);
+    zoom = 1.0f;
+    initialized = false; // Allow snap on next update
+}
