@@ -93,7 +93,6 @@ out vec4 FragColor;
 uniform vec2 uCamPos;
 uniform float uCamZoom;
 uniform float uTime;
-// Stable hash function (numerically stable)
 float hash12(vec2 p) {
     p = fract(p * 0.3183099 + vec2(0.1, 0.7));
     p *= 17.0;
@@ -115,10 +114,8 @@ float starLayer(vec2 world, float cellScale, float radius, float density, float 
 }
 
 void main() {
-    // Normalize NDC to avoid directional artifacts
-    vec2 vNdc = normalize(vNdcRaw);
+    vec2 vNdc = vNdcRaw;
 
-    // World coordinate offset to decorrelate star hashing near the origin
     vec2 worldNear = uCamPos + (vNdc / max(uCamZoom, 0.001)) + vec2(123.45, 678.9);
     vec2 worldFar  = uCamPos + (vNdc / max(uCamZoom * 3.0, 0.001)) + vec2(321.0, 987.6);
 
@@ -127,16 +124,13 @@ void main() {
 
     vec3 top = vec3(0.02, 0.02, 0.07);
     vec3 bot = vec3(0.0,  0.0,  0.00);
-    // Smooth background gradient factor
     float y = smoothstep(-1.0, 1.0, vNdc.y);
     vec3 bg = mix(bot, top, y);
 
     vec3 starCol = vec3(0.85, 0.90, 1.0);
     vec3 col = bg + starCol * (0.6 * sFar + 1.0 * sNear);
 
-    // Gamma correction
-    vec3 gammaCorrected = pow(col, vec3(1.0 / 2.2));
-    FragColor = vec4(gammaCorrected, 1.0);
+    FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
 }
 )";
 
