@@ -78,25 +78,26 @@ void main() {
 static const char* backgroundVertexShaderSrc = R"(
 #version 330 core
 layout(location = 0) in vec2 aPos;
-out vec2 vNdc;
+out vec2 vNdcRaw;
 void main() {
     gl_Position = vec4(aPos, 0.0, 1.0);
-    vNdc = aPos; // NDC in [-1,1]
+    vNdcRaw = aPos; // NDC in [-1,1]
 }
 )";
 
 static const char* backgroundFragmentShaderSrc = R"(
 #version 330 core
-in vec2 vNdc;
+in vec2 vNdcRaw;
 out vec4 FragColor;
 
 uniform vec2 uCamPos;
 uniform float uCamZoom;
 uniform float uTime;
-// Efficient hash (cheap and decent distribution) and lightweight star layer
+// Stable hash function (numerically stable)
 float hash12(vec2 p) {
-    // sin-based hash is cheap and works well for procedural noise in GLSL
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    p = fract(p * 0.3183099 + vec2(0.1, 0.7));
+    p *= 17.0;
+    return fract(p.x * p.y * (p.x + p.y));
 }
 vec2 hash22(vec2 p) {
     return vec2(hash12(p), hash12(p + vec2(41.23, 17.17)));
@@ -114,21 +115,28 @@ float starLayer(vec2 world, float cellScale, float radius, float density, float 
 }
 
 void main() {
-    vec2 worldNear = uCamPos + (vNdc / max(uCamZoom, 0.001));
-    vec2 worldFar  = uCamPos + (vNdc / max(uCamZoom * 3.0, 0.001));
+    // Normalize NDC to avoid directional artifacts
+    vec2 vNdc = normalize(vNdcRaw);
+
+    // World coordinate offset to decorrelate star hashing near the origin
+    vec2 worldNear = uCamPos + (vNdc / max(uCamZoom, 0.001)) + vec2(123.45, 678.9);
+    vec2 worldFar  = uCamPos + (vNdc / max(uCamZoom * 3.0, 0.001)) + vec2(321.0, 987.6);
 
     float sFar  = starLayer(worldFar,  0.08, 0.05, 0.96, 1.0);
     float sNear = starLayer(worldNear, 0.035, 0.08, 0.90, 1.0);
 
     vec3 top = vec3(0.02, 0.02, 0.07);
     vec3 bot = vec3(0.0,  0.0,  0.00);
-    float y = vNdc.y * 0.5 + 0.5;
+    // Smooth background gradient factor
+    float y = smoothstep(-1.0, 1.0, vNdc.y);
     vec3 bg = mix(bot, top, y);
 
     vec3 starCol = vec3(0.85, 0.90, 1.0);
     vec3 col = bg + starCol * (0.6 * sFar + 1.0 * sNear);
 
-    FragColor = vec4(col, 1.0);
+    // Gamma correction
+    vec3 gammaCorrected = pow(col, vec3(1.0 / 2.2));
+    FragColor = vec4(gammaCorrected, 1.0);
 }
 )";
 
