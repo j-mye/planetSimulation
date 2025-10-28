@@ -18,6 +18,7 @@ private:
     int width;
     int height;
     GLFWwindow* window;
+    float cameraZoom = 1.0f;
     // Active simulation viewport (in framebuffer pixels, origin bottom-left)
     int vpLeft = 0, vpBottom = 0, vpWidth = 0, vpHeight = 0;
     
@@ -26,8 +27,8 @@ private:
     GLuint planetVBO;
     GLuint planetShaderProgram;
     GLint loc_uView;
-    GLint loc_uPointSize;
-    GLint loc_uColor;
+    GLint loc_uRadiusScale;
+    GLint loc_uPixelPerWorld;
     
     // Trail rendering
     GLuint trailVAO;
@@ -58,10 +59,11 @@ private:
     
     // Background toggle
     bool starfieldEnabled;
+
+    float planetRadiusScale = 80.0f;
     
     void updateViewMatrix();
     void updateTrails(const std::vector<Planet>& planets);
-    void setupInputCallbacks();
     void initStarfield();
     void drawStarfield();
 
@@ -86,16 +88,12 @@ public:
     void clearTrails();
     void handleInput();
     void setViewportRect(int left, int bottom, int width, int height) { vpLeft = left; vpBottom = bottom; vpWidth = width; vpHeight = height; }
-    bool isInsideViewport(double xWindow, double yWindow) const;
+    void setPlanetVisualScale(float s) { planetRadiusScale = s; }
+    float getPlanetVisualScale() const { return planetRadiusScale; }
     
     // Background control
     void setStarfieldEnabled(bool enabled) { starfieldEnabled = enabled; }
     bool isStarfieldEnabled() const { return starfieldEnabled; }
-    
-    // Input handling (public for callback access)
-    bool mousePressed;
-    glm::vec2 lastMousePos;
-    float cameraZoom;
 };
 
 #endif // RENDERER_HPP

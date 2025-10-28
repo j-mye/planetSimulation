@@ -11,14 +11,22 @@ layout(location = 0) in vec2 aPos;
 layout(location = 1) in float aMass;
 layout(location = 2) in vec3 aVelocity; // unused here, kept for stride compatibility
 layout(location = 3) in vec3 aColor;
+layout(location = 4) in float aRadius;
 
 uniform mat4 uView;
+uniform float uPixelPerWorld; // pixels per world unit (framebuffer-space)
+uniform float uRadiusScale;   // visual amplification of radius
 
 out vec3 vColor;
 
 void main() {
     gl_Position = uView * vec4(aPos, 0.0, 1.0);
-    gl_PointSize = max(1.5, aMass * 2.0);
+
+    // Convert world-space radius to pixels using uPixelPerWorld; ensure a minimum size
+    const float MIN_POINT_SIZE = 2.5;
+    float ps = aRadius * uRadiusScale * 3.0;
+    gl_PointSize = max(MIN_POINT_SIZE, ps);
+
     vColor = aColor;
 }
 )";
@@ -28,8 +36,11 @@ static const char* planetFragmentShaderSrc = R"(
 out vec4 FragColor;
 in vec3 vColor;
 void main() {
-    float dist = length(gl_PointCoord - vec2(0.5));
-    float alpha = smoothstep(0.5, 0.45, dist);
+    // Use squared distance to avoid an expensive sqrt (length)
+    vec2 d = gl_PointCoord - vec2(0.5);
+    float dist2 = dot(d, d);
+    // Smoothstep on squared radii: inner radius ~0.45, outer radius ~0.5
+    float alpha = 1.0 - smoothstep(0.45 * 0.45, 0.5 * 0.5, dist2);
     FragColor = vec4(vColor, alpha);
 }
 )";
@@ -56,7 +67,9 @@ out vec4 FragColor;
 
 uniform vec3 uColor;
 void main() {
-    float alpha = (1.0 - vAge) * 0.6; // dim overall trail alpha to prevent bright center
+    // Linear fade based on normalized age. Clamp to avoid numerical issues.
+    float a = clamp(1.0 - vAge, 0.0, 1.0);
+    float alpha = a * 0.6;
     FragColor = vec4(uColor, alpha);
 }
 )";
@@ -80,53 +93,38 @@ out vec4 FragColor;
 uniform vec2 uCamPos;
 uniform float uCamZoom;
 uniform float uTime;
-
-// Hash functions for procedural stars
+// Efficient hash (cheap and decent distribution) and lightweight star layer
 float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+    // sin-based hash is cheap and works well for procedural noise in GLSL
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
 vec2 hash22(vec2 p) {
-    float n = hash12(p);
-    float m = hash12(p + 17.17);
-    return vec2(n, m);
+    return vec2(hash12(p), hash12(p + vec2(41.23, 17.17)));
 }
 
-// World-anchored parallax starfield
 float starLayer(vec2 world, float cellScale, float radius, float density, float twinkle) {
-    // Scale world space into a star grid
     vec2 g = floor(world * cellScale);
     vec2 f = fract(world * cellScale);
-    // Random star position within the cell
     vec2 starPos = hash22(g) - 0.5;
-    // Distance to the star
-    float d = length(f - (starPos + 0.5));
-    // Star core falloff
-    float core = smoothstep(radius, 0.0, d);
-    // Random presence/brightness per cell
+    float d2 = dot(f - (starPos + 0.5), f - (starPos + 0.5));
+    float core = 1.0 - smoothstep(radius * radius * 0.6, radius * radius, d2);
     float present = step(1.0 - density, hash12(g * 1.73));
-    // Subtle twinkle
-    float tw = 0.85 + 0.15 * sin(uTime * (1.0 + hash12(g * 3.1)) * 2.0);
+    float tw = 0.9 + 0.1 * sin(uTime * (1.0 + hash12(g * 3.1)));
     return core * present * (twinkle > 0.0 ? tw : 1.0);
 }
 
 void main() {
-    // Convert NDC to world space using camera (parallax layers use different effective zooms)
-    vec2 worldNear = uCamPos + (vNdc / max(uCamZoom, 0.001));        // near layer moves more
-    vec2 worldFar  = uCamPos + (vNdc / max(uCamZoom * 3.0, 0.001));   // far layer moves less
+    vec2 worldNear = uCamPos + (vNdc / max(uCamZoom, 0.001));
+    vec2 worldFar  = uCamPos + (vNdc / max(uCamZoom * 3.0, 0.001));
 
-    // Two star layers with different densities/scales
-    float sFar  = starLayer(worldFar,  0.08, 0.05, 0.96, 1.0);  // many tiny distant stars
-    float sNear = starLayer(worldNear, 0.035, 0.08, 0.90, 1.0); // fewer/larger nearby stars
+    float sFar  = starLayer(worldFar,  0.08, 0.05, 0.96, 1.0);
+    float sNear = starLayer(worldNear, 0.035, 0.08, 0.90, 1.0);
 
-    // Base space color gradient (subtle)
     vec3 top = vec3(0.02, 0.02, 0.07);
     vec3 bot = vec3(0.0,  0.0,  0.00);
-    float y = (vNdc.y * 0.5 + 0.5);
+    float y = vNdc.y * 0.5 + 0.5;
     vec3 bg = mix(bot, top, y);
 
-    // Star color (cool white with slight blue tint)
     vec3 starCol = vec3(0.85, 0.90, 1.0);
     vec3 col = bg + starCol * (0.6 * sFar + 1.0 * sNear);
 
@@ -152,8 +150,10 @@ static const char* starFragmentShaderSrc = R"(
 in vec3 vColor;
 out vec4 FragColor;
 void main() {
-    float d = length(gl_PointCoord - vec2(0.5));
-    float alpha = smoothstep(0.6, 0.0, d);
+    vec2 c = gl_PointCoord - vec2(0.5);
+    float d2 = dot(c, c);
+    // Smooth falloff using squared distances for better performance
+    float alpha = 1.0 - smoothstep(0.0, 0.6 * 0.6, d2);
     FragColor = vec4(vColor, alpha);
 }
 )";
@@ -191,54 +191,14 @@ static GLuint linkProgram(GLuint vs, GLuint fs) {
     return prog;
 }
 
-// Static callback functions for GLFW
-static Renderer* currentRenderer = nullptr;
-
-static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    if (currentRenderer) {
-        if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            // Only start panning if press occurs inside simulation viewport
-            if (action == GLFW_PRESS) {
-                double x, y; glfwGetCursorPos(window, &x, &y);
-                currentRenderer->mousePressed = currentRenderer->isInsideViewport(x, y);
-                currentRenderer->lastMousePos = glm::vec2((float)x, (float)y);
-            } else if (action == GLFW_RELEASE) {
-                currentRenderer->mousePressed = false;
-            }
-        }
-    }
-}
-
-static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
-    if (currentRenderer && currentRenderer->mousePressed) {
-        glm::vec2 currentMousePos((float)xpos, (float)ypos);
-        glm::vec2 delta = currentMousePos - currentRenderer->lastMousePos;
-        currentRenderer->pan(delta.x * 0.01f, -delta.y * 0.01f);
-        currentRenderer->lastMousePos = currentMousePos;
-    }
-}
-
-static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-    if (currentRenderer) {
-        // Zoom only if cursor is inside simulation viewport
-        double x, y; glfwGetCursorPos(window, &x, &y);
-        if (currentRenderer->isInsideViewport(x, y)) {
-            float zoomFactor = 1.0f + (float)yoffset * 0.1f;
-            currentRenderer->setZoom(currentRenderer->cameraZoom * zoomFactor);
-        }
-    }
-}
-
 Renderer::Renderer(int w, int h, const char* title)
-    : width(w), height(h), window(nullptr), 
-      planetVAO(0), planetVBO(0), planetShaderProgram(0),
-      trailVAO(0), trailVBO(0), trailShaderProgram(0),
-      backgroundVAO(0), backgroundVBO(0), backgroundShaderProgram(0),
-      cameraPosition(0.0f, 0.0f), cameraZoom(1.0f),
+        : width(w), height(h), window(nullptr), 
+            planetVAO(0), planetVBO(0), planetShaderProgram(0),
+            trailVAO(0), trailVBO(0), trailShaderProgram(0),
+            backgroundVAO(0), backgroundVBO(0), backgroundShaderProgram(0),
+            cameraPosition(0.0f, 0.0f), cameraZoom(1.0f),
             trailsEnabled(true), maxTrailLength(500),
-                        starfieldEnabled(true),
-      mousePressed(false), lastMousePos(0.0f, 0.0f) {
-    currentRenderer = this;
+            starfieldEnabled(true) {
 }
 
 bool Renderer::init() {
@@ -283,6 +243,8 @@ bool Renderer::init() {
 
     // Get planet shader uniform locations
     loc_uView = glGetUniformLocation(planetShaderProgram, "uView");
+    loc_uPixelPerWorld = glGetUniformLocation(planetShaderProgram, "uPixelPerWorld");
+    loc_uRadiusScale = glGetUniformLocation(planetShaderProgram, "uRadiusScale");
 
     // Compile and link trail shaders
     GLuint trailVS = compileShader(GL_VERTEX_SHADER, trailVertexShaderSrc);
@@ -310,15 +272,19 @@ bool Renderer::init() {
     glBindBuffer(GL_ARRAY_BUFFER, planetVBO);
     glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
 
-    // Planet vertex attributes: position (vec2), mass (float), velocity (vec3), color (vec3)
+    // Planet vertex attributes: position (vec2), mass (float), velocity (vec3), color (vec3), radius (float)
+    // Layout: pos(2), mass(1), vel(3), color(3), radius(1) = 10 floats
+    GLsizei pstride = 10 * sizeof(float);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, pstride, (void*)0);
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(2 * sizeof(float)));
+    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, pstride, (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, pstride, (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6 * sizeof(float)));
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, pstride, (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, pstride, (void*)(9 * sizeof(float)));
 
     // Create trail VAO and VBO
     glGenVertexArrays(1, &trailVAO);
@@ -353,26 +319,15 @@ bool Renderer::init() {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
 
+
     // Unbind everything
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-    // Setup input callbacks
-    setupInputCallbacks();
-
-    // Initialize view matrix
     updateViewMatrix();
-
-    // Initialize static starfield resources
     initStarfield();
 
     return true;
-}
-
-void Renderer::setupInputCallbacks() {
-    glfwSetMouseButtonCallback(window, mouseButtonCallback);
-    glfwSetCursorPosCallback(window, cursorPosCallback);
-    glfwSetScrollCallback(window, scrollCallback);
 }
 
 void Renderer::updateViewMatrix() {
@@ -399,10 +354,9 @@ void Renderer::beginFrame() {
 
 void Renderer::drawBackground(const Camera& camera) {
     if (!starfieldEnabled) {
-        return; // disabled for debugging visibility issues
+        return;
     }
-    // Draw static starfield (NDC points)
-    (void)camera; // unused (static background)
+    (void)camera;
     drawStarfield();
 }
 
@@ -478,37 +432,43 @@ void Renderer::drawPlanets(const std::vector<Planet>& planets, const Camera& cam
     if (planets.empty()) return;
 
     std::vector<float> planetData;
-    planetData.reserve(planets.size() * 9); 
+    planetData.reserve(planets.size() * 10);  // 10 values per planet (2 position, 1 mass, 3 velocity, 3 color, 1 radius)
+
     for (const auto& planet : planets) {
         planetData.push_back(planet.getP().getX());
         planetData.push_back(planet.getP().getY());
         planetData.push_back(planet.getMass());
         planetData.push_back(planet.getV().getX());
         planetData.push_back(planet.getV().getY());
-        planetData.push_back(0.0f); // Z component (not used in 2D)
+        planetData.push_back(0.0f); // Z component (unused in 2D)
         const glm::vec3 c = planet.getColor();
         planetData.push_back(c.r);
         planetData.push_back(c.g);
         planetData.push_back(c.b);
+        planetData.push_back(planet.getRadius());
     }
 
     // Upload planet data to GPU
     glBindBuffer(GL_ARRAY_BUFFER, planetVBO);
     glBufferData(GL_ARRAY_BUFFER, planetData.size() * sizeof(float), planetData.data(), GL_DYNAMIC_DRAW);
 
-    // Draw planets using camera's view matrix
     glUseProgram(planetShaderProgram);
     glm::mat4 viewMatrix = camera.getViewMatrix();
     glUniformMatrix4fv(loc_uView, 1, GL_FALSE, glm::value_ptr(viewMatrix));
+    
+    int fbW = 0, fbH = 0; glfwGetFramebufferSize(window, &fbW, &fbH);
+    float pixelPerWorld = camera.getZoom() * static_cast<float>(fbH);
+    if (loc_uPixelPerWorld >= 0) glUniform1f(loc_uPixelPerWorld, pixelPerWorld);
+    if (loc_uRadiusScale   >= 0) glUniform1f(loc_uRadiusScale, planetRadiusScale);
 
     glBindVertexArray(planetVAO);
     glDrawArrays(GL_POINTS, 0, static_cast<GLsizei>(planets.size()));
 
-    // Cleanup
     glBindVertexArray(0);
     glUseProgram(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
+
 
 void Renderer::updateTrails(const std::vector<Planet>& planets) {
     if (trails.size() != planets.size()) {
@@ -581,32 +541,31 @@ void Renderer::handleInput() {
     }
 
     float panSpeed = 0.01f / cameraZoom;
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-        pan(-panSpeed, 0.0f);
-    }
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        pan(panSpeed, 0.0f);
-    }
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-        pan(0.0f, panSpeed);
-    }
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-        pan(0.0f, -panSpeed);
-    }
-
-    if (glfwGetKey(window, GLFW_KEY_EQUAL) == GLFW_PRESS) {
-        setZoom(cameraZoom * 1.05f);
-    }
-    if (glfwGetKey(window, GLFW_KEY_MINUS) == GLFW_PRESS) {
-        setZoom(cameraZoom * 0.95f);
-    }
-
-    static bool tKeyPressed = false;
-    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS && !tKeyPressed) {
-        trailsEnabled = !trailsEnabled;
-        tKeyPressed = true;
-    } else if (glfwGetKey(window, GLFW_KEY_T) == GLFW_RELEASE) {
-        tKeyPressed = false;
+    switch (GLFW_PRESS) {
+        case GLFW_KEY_LEFT:
+            pan(-panSpeed, 0.0f);
+            break;
+        case GLFW_KEY_A:
+            pan(-panSpeed, 0.0f);
+            break;
+        case GLFW_KEY_RIGHT:
+            pan(panSpeed, 0.0f);
+            break;
+        case GLFW_KEY_D:
+            pan(panSpeed, 0.0f);
+            break;
+        case GLFW_KEY_UP:
+            pan(0.0f, panSpeed);
+            break;
+        case GLFW_KEY_W:
+            pan(0.0f, panSpeed);
+            break;
+        case GLFW_KEY_DOWN:
+            pan(0.0f, -panSpeed);
+            break;
+        case GLFW_KEY_S:
+            pan(0.0f, -panSpeed);
+            break;
     }
 }
 
@@ -664,14 +623,4 @@ void Renderer::cleanup() {
         window = nullptr;
     }
     glfwTerminate();
-}
-
-// debug bounds drawing removed
-
-bool Renderer::isInsideViewport(double xWindow, double yWindow) const {
-    // Convert window-space y (origin top-left) to framebuffer-space bottom-left
-    int fbW, fbH; glfwGetFramebufferSize(window, &fbW, &fbH);
-    double yBL = (double)fbH - yWindow;
-    return (xWindow >= vpLeft && xWindow < (vpLeft + vpWidth) &&
-            yBL     >= vpBottom && yBL    < (vpBottom + vpHeight));
 }

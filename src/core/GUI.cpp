@@ -156,31 +156,7 @@ void GUI::render(Simulation& sim, Camera& camera, Renderer& renderer, float delt
             
             ImGui::Separator();
             
-            // Collision controls
-            bool collisionsEnabled = sim.areCollisionsEnabled();
-            if (ImGui::Checkbox("Enable Collisions", &collisionsEnabled)) {
-                sim.setCollisionsEnabled(collisionsEnabled);
-            }
-            
-            if (collisionsEnabled) {
-                ImGui::Text("Soft Collision Settings:");
-                
-                float collisionStrength = sim.getCollisionStrength();
-                if (ImGui::SliderFloat("Repulsion Strength", &collisionStrength, 0.1f, 2.0f, "%.2f")) {
-                    sim.setCollisionStrength(collisionStrength);
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Higher values = stronger push when planets touch");
-                }
-                
-                float collisionDamping = sim.getCollisionDamping();
-                if (ImGui::SliderFloat("Collision Damping", &collisionDamping, 0.85f, 0.99f, "%.3f")) {
-                    sim.setCollisionDamping(collisionDamping);
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Lower values = more energy loss during contact");
-                }
-            }
+            // Collisions removed from UI
         }
         
         ImGui::Spacing();

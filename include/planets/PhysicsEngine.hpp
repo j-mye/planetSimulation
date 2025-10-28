@@ -11,13 +11,13 @@
 class PhysicsEngine {
 private:
     std::vector<Planet*> bodies;
-    static constexpr double G = 6.67430e-11;
-    double softening = 1e-3;
+    double G = 0.05;         // default sim-scale gravity (tunable)
+    double softening = 0.02; // default softening (tunable)
 
 public:
     PhysicsEngine() = default;
-    // void setG(double g) { G = g; }
-    void setSoftening(double s) { softening = s; }
+    void setGravityParams(float g, float eps) { G = g; softening = eps; }
+    std::pair<float, float> getGravityParams() const { return { static_cast<float>(G), static_cast<float>(softening) }; }
 
     void addBody(Planet* body) { bodies.push_back(body); }
     void clearBodies() { bodies.clear(); }
@@ -31,7 +31,7 @@ public:
 
                 Vector2 r = b->getP() - a->getP();
                 float dist = r.length();
-                float denom = (dist*dist) + static_cast<float>(softening);
+                float denom = (dist*dist) + static_cast<float>(softening * softening);
                 if (denom == 0.0f) continue;
 
                 double forceMag = G * a->getMass() * b->getMass() / static_cast<double>(denom);
