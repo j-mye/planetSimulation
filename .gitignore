@@ -11,3 +11,7 @@ CMakeFiles/
 
 # Ignore Windows batch files
 *.bat
+
+#Ignore readmes
+TODO.md
+README.md
