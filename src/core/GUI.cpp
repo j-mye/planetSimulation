@@ -90,32 +90,7 @@ void GUI::render(Simulation& sim, Camera& camera, Renderer& renderer, float delt
             
             ImGui::Separator();
             ImGui::Text("Bodies: %d", lastPlanetCount);
-            
-            // Calculate center of mass
-            if (!planets.empty()) {
-                float totalMass = 0.0f;
-                Vector2 com(0.0f, 0.0f);
-                for (const auto& p : planets) {
-                    float m = p.getMass();
-                    com += p.getP() * m;
-                    totalMass += m;
-                }
-                if (totalMass > 0.0f) {
-                    com = com / totalMass;
-                    ImGui::Text("COM: (%.2f, %.2f)", com.getX(), com.getY());
-                }
-                
-                // Calculate total kinetic energy
-                float kineticEnergy = 0.0f;
-                for (const auto& p : planets) {
-                    float v2 = p.getV().getX() * p.getV().getX() + p.getV().getY() * p.getV().getY();
-                    kineticEnergy += 0.5f * p.getMass() * v2;
-                }
-                ImGui::Text("KE: %.2f", kineticEnergy);
-            }
-            
             ImGui::Text("Zoom: %.3f", camera.getZoom());
-            ImGui::Text("Camera: (%.2f, %.2f)", camera.getPosition().x, camera.getPosition().y);
         }
         
         ImGui::Spacing();
@@ -189,11 +164,6 @@ void GUI::render(Simulation& sim, Camera& camera, Renderer& renderer, float delt
         
         // === CAMERA SECTION ===
         if (ImGui::CollapsingHeader("Camera")) {
-            bool autoZoom = camera.isAutoZoomEnabled();
-            if (ImGui::Checkbox("Auto-Zoom", &autoZoom)) {
-                camera.setAutoZoom(autoZoom);
-            }
-            
             float zoomSpeed = 0.1f;
             if (ImGui::Button("-", ImVec2(40, 0))) {
                 camera.zoomBy(1.0f - zoomSpeed);
@@ -216,7 +186,6 @@ void GUI::render(Simulation& sim, Camera& camera, Renderer& renderer, float delt
         
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::TextDisabled("Press 'H' to toggle this panel");
     }
     ImGui::End();
     

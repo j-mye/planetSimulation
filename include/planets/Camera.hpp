@@ -26,9 +26,12 @@ public:
     glm::vec2 getPosition() const { return position; }
     float getZoom() const { return zoom; }
     glm::vec2 getTarget() const { return target; }
-    void setAutoZoom(bool enabled) { autoZoom = enabled; }
-    bool isAutoZoomEnabled() const { return autoZoom; }
     void reset();
+
+    // Planet following
+    void setFollowedPlanet(int index) { followedPlanetIndex = index; }
+    int getFollowedPlanet() const { return followedPlanetIndex; }
+    bool isFollowingPlanet() const { return followedPlanetIndex >= 0; }
 
     // Auto-zoom outlier exclusion controls
     void setOutlierMultiplier(float m) { outlierMultiplier = std::max(1.0f, m); }
@@ -37,10 +40,11 @@ public:
 private:
     glm::vec2 position, target;
     float zoom;
+    float zoomOffset = 1.0f; // User's manual zoom multiplier (1.0 = no offset)
     float smoothing;
     float aspect;
-    bool autoZoom;
     bool initialized = false; // snap on first update
+    int followedPlanetIndex = -1; // -1 = follow COM, >= 0 = follow specific planet
     float outlierMultiplier = 3.0f; // Exclude bodies farther than m * median distance
 
     glm::vec2 computeCenterOfMass(const std::vector<Planet>& planets) const;

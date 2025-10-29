@@ -7,39 +7,47 @@
 
 Camera::Camera(float screenWidth, float screenHeight)
     : position(0.0f), target(0.0f), zoom(1.0f), smoothing(5.0f),
-    aspect(screenWidth / screenHeight), autoZoom(true) {}
+    aspect(screenWidth / screenHeight) {}
 
 void Camera::update(const std::vector<Planet>& planets, float deltaTime) {
     if (planets.empty()) return;
 
-    // Compute inlier set by excluding far-out bodies
-    std::vector<size_t> inliers;
-    computeInliers(planets, inliers);
-
-    // Recompute COM using inliers for better stability
-    if (!inliers.empty()) {
-        glm::dvec2 weightedSum(0.0);
-        double totalMass = 0.0;
-        for (size_t idx : inliers) {
-            const Planet& pl = planets[idx];
-            const double mass = static_cast<double>(pl.getMass());
-            const glm::dvec2 pos(
-                static_cast<double>(pl.getP().getX()),
-                static_cast<double>(pl.getP().getY())
-            );
-            weightedSum += pos * mass;
-            totalMass += mass;
-        }
-        target = (totalMass > 0.0) ? glm::vec2(weightedSum / totalMass) : computeCenterOfMass(planets);
+    // Check if we're following a specific planet
+    if (followedPlanetIndex >= 0 && followedPlanetIndex < static_cast<int>(planets.size())) {
+        // Follow the specific planet
+        const Planet& followedPlanet = planets[followedPlanetIndex];
+        target = glm::vec2(followedPlanet.getP().getX(), followedPlanet.getP().getY());
     } else {
-        target = computeCenterOfMass(planets);
+        // Follow COM (default behavior)
+        followedPlanetIndex = -1; // reset if out of bounds
+        
+        // Compute inlier set by excluding far-out bodies
+        std::vector<size_t> inliers;
+        computeInliers(planets, inliers);
+
+        // Recompute COM using inliers for better stability
+        if (!inliers.empty()) {
+            glm::dvec2 weightedSum(0.0);
+            double totalMass = 0.0;
+            for (size_t idx : inliers) {
+                const Planet& pl = planets[idx];
+                const double mass = static_cast<double>(pl.getMass());
+                const glm::dvec2 pos(
+                    static_cast<double>(pl.getP().getX()),
+                    static_cast<double>(pl.getP().getY())
+                );
+                weightedSum += pos * mass;
+                totalMass += mass;
+            }
+            target = (totalMass > 0.0) ? glm::vec2(weightedSum / totalMass) : computeCenterOfMass(planets);
+        } else {
+            target = computeCenterOfMass(planets);
+        }
     }
     if (!initialized) {
         // Snap on first frame to avoid flash or overshoot
         position = target;
-        if (autoZoom) {
-            zoom = computeOptimalZoom(planets);
-        }
+        zoom = computeOptimalZoom(planets) * zoomOffset;
         initialized = true;
         return;
     }
@@ -48,21 +56,24 @@ void Camera::update(const std::vector<Planet>& planets, float deltaTime) {
     // Smoothly interpolate camera position toward target
     position += (target - position) * lerpFactor;
     
-    // Auto-adjust zoom to fit all planets within the window (if enabled)
-    if (autoZoom) {
-        float optimalZoom = computeOptimalZoom(planets);
-        const float zoomLerpFactor = 1.0f - std::exp(-smoothing * deltaTime * 0.5f); // Slower zoom adjustment
-        zoom += (optimalZoom - zoom) * zoomLerpFactor;
-    }
+    // Auto-adjust zoom to fit all planets within the window (always on)
+    // Apply user's zoom offset on top of optimal zoom
+    float optimalZoom = computeOptimalZoom(planets);
+    float targetZoom = optimalZoom * zoomOffset;
+    const float zoomLerpFactor = 1.0f - std::exp(-smoothing * deltaTime * 0.5f); // Slower zoom adjustment
+    zoom += (targetZoom - zoom) * zoomLerpFactor;
 }
 
 void Camera::setZoom(float z) {
-    // Allow a much wider range to accommodate large/small scenes
+    // When user manually sets zoom, calculate the offset from current optimal zoom
+    // This preserves the user's zoom preference relative to auto-zoom
     zoom = std::clamp(z, 0.0005f, 100.0f);
 }
 
 void Camera::zoomBy(float factor) {
-    setZoom(zoom * factor);
+    // Apply factor to zoom offset to preserve user's zoom preference
+    zoomOffset *= factor;
+    zoomOffset = std::clamp(zoomOffset, 0.1f, 10.0f); // Keep offset in reasonable range
 }
 
 void Camera::pan(float dx, float dy) {
@@ -202,5 +213,7 @@ void Camera::reset() {
     position = glm::vec2(0.0f, 0.0f);
     target = glm::vec2(0.0f, 0.0f);
     zoom = 1.0f;
+    zoomOffset = 1.0f; // Reset zoom offset
+    followedPlanetIndex = -1; // Reset to COM follow
     initialized = false; // Allow snap on next update
 }

@@ -41,7 +41,6 @@ int main() {
     cout << "  Mouse: Drag to pan, Scroll to zoom" << endl;
     cout << "  Arrow Keys: Pan camera" << endl;
     cout << "  +/-: Zoom in/out" << endl;
-    cout << "  Z: Toggle auto-zoom (keeps all planets visible)" << endl;
     cout << "  T: Toggle trails" << endl;
     cout << "  H: Toggle GUI panel" << endl;
     cout << "  C: Clear trails" << endl;
@@ -85,6 +84,68 @@ int main() {
             renderer.handleInput();
         }
 
+        // Double-click to follow planet (only if not captured by GUI)
+        if (!guiCapturesMouse) {
+            static double lastClickTime = 0.0;
+            static const double doubleClickDelay = 0.3; // 300ms
+            
+            static bool mouseButtonWasPressed = false;
+            bool mouseButtonPressed = (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+            
+            if (mouseButtonPressed && !mouseButtonWasPressed) {
+                // Mouse button just pressed
+                double currentTime = glfwGetTime();
+                if (currentTime - lastClickTime < doubleClickDelay) {
+                    // Double-click detected!
+                    double xpos, ypos;
+                    glfwGetCursorPos(window, &xpos, &ypos);
+                    
+                    // Convert screen coordinates to world coordinates
+                    // Account for GUI panel offset
+                    float xNorm = ((float)xpos - (float)gui.getPanelWidth()) / (float)(winW - gui.getPanelWidth());
+                    float yNorm = (float)ypos / (float)winH;
+                    
+                    // Convert to NDC [-1, 1]
+                    float ndcX = xNorm * 2.0f - 1.0f;
+                    float ndcY = 1.0f - yNorm * 2.0f; // flip Y
+                    
+                    // Convert to world space
+                    glm::vec2 worldPos = camera.getPosition() + glm::vec2(ndcX, ndcY) / camera.getZoom();
+                    
+                    // Find closest planet
+                    int closestIndex = -1;
+                    float closestDist = std::numeric_limits<float>::max();
+                    for (int i = 0; i < sim.getPlanets().size(); ++i) {
+                        const Planet& p = sim.getPlanets()[i];
+                        glm::vec2 planetPos(p.getP().getX(), p.getP().getY());
+                        float dist = glm::length(worldPos - planetPos);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closestIndex = i;
+                        }
+                    }
+                    
+                    // Toggle follow mode
+                    if (closestIndex >= 0) {
+                        if (camera.getFollowedPlanet() == closestIndex) {
+                            // Double-clicked same planet - return to COM follow
+                            camera.setFollowedPlanet(-1);
+                            std::cout << "Following center of mass" << std::endl;
+                        } else {
+                            // Follow new planet
+                            camera.setFollowedPlanet(closestIndex);
+                            std::cout << "Following planet " << closestIndex << std::endl;
+                        }
+                    }
+                    
+                    lastClickTime = 0.0; // reset to prevent triple-click
+                } else {
+                    lastClickTime = currentTime;
+                }
+            }
+            mouseButtonWasPressed = mouseButtonPressed;
+        }
+
     // GUI toggle (H) should always be available
         
     // GUI controls
@@ -116,7 +177,7 @@ int main() {
             }
         }
 
-        // Advance physics using fixed-step accumulator for wide-range time scaling
+        // Advance physics using fixed-step accumulator
         {
             static double accumulator = 0.0;
             if (gui.wasRestartTriggered()) {
@@ -125,9 +186,8 @@ int main() {
             }
 
             if (!gui.isSimulationPaused()) {
-                const float simDt = sim.getTimeStep();
-                const float scaled = deltaTime * gui.getTimeScale();
-                accumulator += scaled;
+                const float baseSimDt = sim.getTimeStep();
+                accumulator += deltaTime;
 
                 // Clamp accumulator to prevent spiral of death on slow frames
                 const double maxAccum = 0.25; // seconds
@@ -135,9 +195,13 @@ int main() {
 
                 int substeps = 0;
                 const int maxSubstepsPerFrame = 500;
-                while (accumulator >= simDt && substeps < maxSubstepsPerFrame) {
+                while (accumulator >= baseSimDt && substeps < maxSubstepsPerFrame) {
+                    // Apply time scaling by adjusting dt passed to simulation
+                    const float scaledDt = baseSimDt * gui.getTimeScale();
+                    sim.setTimeStep(scaledDt);
                     sim.step();
-                    accumulator -= simDt;
+                    sim.setTimeStep(baseSimDt); // restore base timestep
+                    accumulator -= baseSimDt;
                     ++substeps;
                 }
             }
@@ -166,15 +230,6 @@ int main() {
             }
             if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
                 camera.pan(0.0f, -panSpeed);
-            }
-
-            static bool zKeyPressed = false;
-            if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS && !zKeyPressed) {
-                camera.setAutoZoom(!camera.isAutoZoomEnabled());
-                std::cout << "Auto-zoom " << (camera.isAutoZoomEnabled() ? "enabled" : "disabled") << std::endl;
-                zKeyPressed = true;
-            } else if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_RELEASE) {
-                zKeyPressed = false;
             }
         }
         
