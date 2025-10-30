@@ -3,7 +3,6 @@
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
-#include <iostream>
 #include <cmath>
 
 GUI::GUI() {
@@ -16,21 +15,8 @@ GUI::~GUI() {
 
 bool GUI::init(GLFWwindow* win) {
     window = win;
-    
-    // Setup ImGui context
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    
-    // Setup style
-    ImGui::StyleColorsDark();
-    
-    // Setup Platform/Renderer backends
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
-    
-    std::cout << "GUI initialized successfully" << std::endl;
+    // Renderer is responsible for ImGui initialization (context + backends).
+    // GUI only stores the window pointer and uses ImGui APIs afterward.
     return true;
 }
 
@@ -40,9 +26,8 @@ bool GUI::wantsCaptureKeyboard() const {
 }
 
 void GUI::shutdown() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    // GUI does not own ImGui context; Renderer handles ImGui shutdown.
+    window = nullptr;
 }
 
 void GUI::newFrame() {
@@ -113,20 +98,18 @@ void GUI::render(Simulation& sim, Camera& camera, Renderer& renderer, float delt
                 camera.reset();
             }
             
-            // Time scale (logarithmic slider for wide range)
-            ImGui::SliderFloat("Time Scale", &timeScale, 0.001f, 200.0f, "%.3f x", ImGuiSliderFlags_Logarithmic);
+            // Time scale (linear slider from 0.01x to 10.0x)
+            ImGui::SliderFloat("Time Scale", &timeScale, 0.01f, 10.0f, "%.2f x");
             
             ImGui::Separator();
             
-            // Gravity controls
-            float g = sim.getGravityParams().first;
-            if (ImGui::SliderFloat("Gravity (G)", &g, 0.01f, 0.2f, "%.3f")) {
-                sim.setGravityParams(g, sim.getGravityParams().second);
+            // Gravity controls (using multipliers)
+            if (ImGui::SliderFloat("Gravity", &gravityMultiplier, 0.1f, 5.0f, "%.2f x")) {
+                sim.setGravityParams(BASE_GRAVITY * gravityMultiplier, BASE_SOFTENING * softeningMultiplier);
             }
             
-            float softening = sim.getGravityParams().second;
-            if (ImGui::SliderFloat("Softening", &softening, 0.001f, 0.1f, "%.3f")) {
-                sim.setGravityParams(sim.getGravityParams().first, softening);
+            if (ImGui::SliderFloat("Softening", &softeningMultiplier, 0.1f, 5.0f, "%.2f x")) {
+                sim.setGravityParams(BASE_GRAVITY * gravityMultiplier, BASE_SOFTENING * softeningMultiplier);
             }
             
             ImGui::Separator();
@@ -163,7 +146,7 @@ void GUI::render(Simulation& sim, Camera& camera, Renderer& renderer, float delt
         ImGui::Spacing();
         
         // === CAMERA SECTION ===
-        if (ImGui::CollapsingHeader("Camera")) {
+        if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
             float zoomSpeed = 0.1f;
             if (ImGui::Button("-", ImVec2(40, 0))) {
                 camera.zoomBy(1.0f - zoomSpeed);

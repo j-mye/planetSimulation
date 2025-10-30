@@ -15,6 +15,7 @@ class Planet {
 private:
     Vector2 p;
     Vector2 v;
+    Vector2 forceAccumulator; // Accumulated force for current timestep
     float mass = 1.0f;
     float radius = 1.0f;
     glm::vec3 color = glm::vec3(0.95f, 0.98f, 1.0f);
@@ -24,11 +25,11 @@ private:
     static const std::size_t maxTrailLength = 1000;
 
 public:
-    Planet() : v{0.0f, 0.0f}, p{0.0f, 0.0f} {}
-    Planet(const Vector2& initialV) : v{initialV}, p{0.0f, 0.0f} {}
-    Planet(const Vector2& initialV, const Vector2& initialP) : v{initialV}, p{initialP} {}
+    Planet() : v{0.0f, 0.0f}, p{0.0f, 0.0f}, forceAccumulator{0.0f, 0.0f} {}
+    Planet(const Vector2& initialV) : v{initialV}, p{0.0f, 0.0f}, forceAccumulator{0.0f, 0.0f} {}
+    Planet(const Vector2& initialV, const Vector2& initialP) : v{initialV}, p{initialP}, forceAccumulator{0.0f, 0.0f} {}
     Planet(const Vector2& initialP, const Vector2& initialV, float m, float r)
-        : v{initialV}, p{initialP}, mass{m}, radius{r} {}
+        : v{initialV}, p{initialP}, mass{m}, radius{r}, forceAccumulator{0.0f, 0.0f} {}
     
     float getMass() const { return mass; }
     void setMass(float m) { mass = m; }
@@ -57,9 +58,18 @@ public:
     }
 
     void applyForce(const Vector2& force, float dt) {
-        // acceleration = force / mass
-        Vector2 acc = force / static_cast<double>(mass);
-        v += acc * dt;
+        // Accumulate force (dt is not used here, integration happens separately)
+        forceAccumulator += force;
+    }
+    
+    void clearForces() {
+        forceAccumulator = Vector2(0.0f, 0.0f);
+    }
+    
+    void integrateVelocity(float dt) {
+        // Apply accumulated forces to velocity: v += (F/m) * dt
+        Vector2 acceleration = forceAccumulator / static_cast<double>(mass);
+        v += acceleration * dt;
     }
 
     void printInfo() const {

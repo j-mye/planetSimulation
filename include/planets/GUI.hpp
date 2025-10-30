@@ -16,7 +16,7 @@ class GUI {
 private:
     GLFWwindow* window;
     bool visible = true;
-    static constexpr int PANEL_WIDTH = 320; // fixed left-column width
+    static constexpr int PANEL_WIDTH = 320;
     
     // FPS tracking
     std::deque<float> fpsHistory;
@@ -25,6 +25,12 @@ private:
     // Control state
     bool isPaused = false;
     float timeScale = 1.0f;
+    
+    // Base physics constants
+    static constexpr float BASE_GRAVITY = 0.05f;
+    static constexpr float BASE_SOFTENING = 0.02f;
+    float gravityMultiplier = 1.0f;
+    float softeningMultiplier = 1.0f;
     
     // Stats
     int lastPlanetCount = 0;
@@ -45,11 +51,11 @@ public:
     float getTimeScale() const { return timeScale; }
     bool isVisible() const { return visible; }
     int getPanelWidth() const { return PANEL_WIDTH; }
+    
     // Ask whether ImGui currently wants to capture keyboard input
     bool wantsCaptureKeyboard() const;
     bool wantsCaptureMouse() const;
     
-    // Control setters
     void setPaused(bool paused) { isPaused = paused; }
     void toggleVisibility() { visible = !visible; }
 

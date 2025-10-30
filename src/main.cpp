@@ -16,7 +16,6 @@ using namespace std;
 int main() {
     Renderer renderer(1280, 720, "Planetary Simulation");
     if (!renderer.init()) {
-        std::cerr << "Failed to initialize renderer" << endl;
         return -1;
     }
 
@@ -25,7 +24,6 @@ int main() {
     // Initialize GUI
     GUI gui;
     if (!gui.init(renderer.getWindow())) {
-        std::cerr << "Failed to initialize GUI" << endl;
         return -1;
     }
 
@@ -35,17 +33,6 @@ int main() {
     sim.setTimeStep(0.0015f);
     const int N = 12;
     sim.initRandom(N, 1337);
-
-    cout << "Planetary Simulation Started!" << endl;
-    cout << "Controls:" << endl;
-    cout << "  Mouse: Drag to pan, Scroll to zoom" << endl;
-    cout << "  Arrow Keys: Pan camera" << endl;
-    cout << "  +/-: Zoom in/out" << endl;
-    cout << "  T: Toggle trails" << endl;
-    cout << "  H: Toggle GUI panel" << endl;
-    cout << "  C: Clear trails" << endl;
-    cout << "  SPACE: Pause/Resume simulation" << endl;
-    cout << "  ESC: Exit" << endl;
 
     float physicsTimeStep = 0.0016f;
     double lastTime = glfwGetTime();
@@ -130,11 +117,9 @@ int main() {
                         if (camera.getFollowedPlanet() == closestIndex) {
                             // Double-clicked same planet - return to COM follow
                             camera.setFollowedPlanet(-1);
-                            std::cout << "Following center of mass" << std::endl;
                         } else {
                             // Follow new planet
                             camera.setFollowedPlanet(closestIndex);
-                            std::cout << "Following planet " << closestIndex << std::endl;
                         }
                     }
                     
@@ -161,7 +146,6 @@ int main() {
             static bool spaceKeyPressed = false;
             if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS && !spaceKeyPressed) {
                 gui.setPaused(!gui.isSimulationPaused());
-                std::cout << "Simulation " << (gui.isSimulationPaused() ? "paused" : "resumed") << std::endl;
                 spaceKeyPressed = true;
             } else if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_RELEASE) {
                 spaceKeyPressed = false;
@@ -170,7 +154,6 @@ int main() {
             static bool cKeyPressed = false;
             if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !cKeyPressed) {
                 renderer.clearTrails();
-                std::cout << "Trails cleared" << std::endl;
                 cKeyPressed = true;
             } else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE) {
                 cKeyPressed = false;
@@ -252,7 +235,6 @@ int main() {
     }
     
     gui.shutdown();
-    renderer.cleanup();    
-    cout << "Simulation ended after " << time << " seconds" << endl;
+    renderer.cleanup();
     return 0;
 }

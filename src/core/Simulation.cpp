@@ -1,5 +1,4 @@
 #include "planets/Simulation.hpp"
-#include <iostream>
 #include <random>
 #include <cmath>
 
@@ -58,17 +57,4 @@ void Simulation::step() {
 
 void Simulation::update() {
     step();
-}
-
-void Simulation::run(int steps) {
-    running = true;
-}
-
-void Simulation::printStatus() const {
-    std::cout << "Simulation status:\n";
-    int idx = 0;
-    for (const auto &pl : planets) {
-        std::cout << "Planet " << idx++ << ": ";
-        pl.printInfo();
-    }
 }

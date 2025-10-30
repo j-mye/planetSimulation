@@ -94,6 +94,8 @@ public:
     // Background control
     void setStarfieldEnabled(bool enabled) { starfieldEnabled = enabled; }
     bool isStarfieldEnabled() const { return starfieldEnabled; }
+    // ImGui init guard
+    bool imguiInitialized = false;
 };
 
 #endif // RENDERER_HPP

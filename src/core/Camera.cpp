@@ -1,5 +1,4 @@
 #include "planets/Camera.hpp"
-#include <iostream>
 #include <algorithm>
 #include <limits>
 #include <glm/gtc/matrix_transform.hpp>

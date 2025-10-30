@@ -1,8 +1,12 @@
 #include "planets/Renderer.hpp"
-#include <iostream>
 #include <vector>
 #include <algorithm>
 #include <random>
+
+// ImGui (centralized initialization/shutdown in Renderer)
+#include <imgui.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_opengl3.h>
 
 // Planet shader sources (simple, uniform-colored circular points)
 static const char* planetVertexShaderSrc = R"(
@@ -169,9 +173,7 @@ static GLuint compileShader(GLenum type, const char* src) {
     GLint success;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success) {
-        char log[1024];
-        glGetShaderInfoLog(shader, 1024, nullptr, log);
-        std::cerr << "Shader compile error: " << log << std::endl;
+        // Shader compilation failed - silently continue
     }
     return shader;
 }
@@ -186,9 +188,7 @@ static GLuint linkProgram(GLuint vs, GLuint fs) {
     GLint success;
     glGetProgramiv(prog, GL_LINK_STATUS, &success);
     if (!success) {
-        char log[1024];
-        glGetProgramInfoLog(prog, 1024, nullptr, log);
-        std::cerr << "Program link error: " << log << std::endl;
+        // Program linking failed - silently continue
     }
     return prog;
 }
@@ -205,7 +205,6 @@ Renderer::Renderer(int w, int h, const char* title)
 
 bool Renderer::init() {
     if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW\n";
         return false;
     }
 
@@ -215,7 +214,6 @@ bool Renderer::init() {
 
     window = glfwCreateWindow(width, height, "Planetary Simulation", nullptr, nullptr);
     if (!window) {
-        std::cerr << "Failed to create window\n";
         glfwTerminate();
         return false;
     }
@@ -223,8 +221,20 @@ bool Renderer::init() {
     glfwMakeContextCurrent(window);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cerr << "Failed to initialize GLAD\n";
         return false;
+    }
+
+    // Initialize ImGui AFTER the GL context is current
+    if (!imguiInitialized) {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+        ImGui_ImplOpenGL3_Init("#version 330");
+        imguiInitialized = true;
     }
 
     glViewport(0, 0, width, height);
@@ -433,7 +443,9 @@ void Renderer::drawStarfield() {
 void Renderer::drawPlanets(const std::vector<Planet>& planets, const Camera& camera) {
     if (planets.empty()) return;
 
-    std::vector<float> planetData;
+    // Reusable buffer to reduce allocations
+    static thread_local std::vector<float> planetData;
+    planetData.clear();
     planetData.reserve(planets.size() * 10);  // 10 values per planet (2 position, 1 mass, 3 velocity, 3 color, 1 radius)
 
     for (const auto& planet : planets) {
@@ -474,6 +486,7 @@ void Renderer::drawPlanets(const std::vector<Planet>& planets, const Camera& cam
 
 void Renderer::updateTrails(const std::vector<Planet>& planets) {
     if (trails.size() != planets.size()) {
+        trails.clear();
         trails.resize(planets.size());
     }
 
@@ -494,10 +507,13 @@ void Renderer::drawTrails(const std::vector<Planet>& planets, const Camera& came
     glm::mat4 viewMatrix = camera.getViewMatrix();
     glUniformMatrix4fv(trailLoc_uView, 1, GL_FALSE, glm::value_ptr(viewMatrix));
 
+    // Reusable buffer to reduce allocations
+    static thread_local std::vector<float> trailData;
+
     for (size_t i = 0; i < trails.size() && i < planets.size(); ++i) {
         if (trails[i].size() < 2) continue;
 
-        std::vector<float> trailData;
+        trailData.clear();
         trailData.reserve(trails[i].size() * 3);
 
         float maxAge = static_cast<float>(trails[i].size() - 1);
@@ -541,37 +557,22 @@ void Renderer::handleInput() {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, true);
     }
-
-    float panSpeed = 0.01f / cameraZoom;
-    switch (GLFW_PRESS) {
-        case GLFW_KEY_LEFT:
-            pan(-panSpeed, 0.0f);
-            break;
-        case GLFW_KEY_A:
-            pan(-panSpeed, 0.0f);
-            break;
-        case GLFW_KEY_RIGHT:
-            pan(panSpeed, 0.0f);
-            break;
-        case GLFW_KEY_D:
-            pan(panSpeed, 0.0f);
-            break;
-        case GLFW_KEY_UP:
-            pan(0.0f, panSpeed);
-            break;
-        case GLFW_KEY_W:
-            pan(0.0f, panSpeed);
-            break;
-        case GLFW_KEY_DOWN:
-            pan(0.0f, -panSpeed);
-            break;
-        case GLFW_KEY_S:
-            pan(0.0f, -panSpeed);
-            break;
-    }
+    // Camera pan controls moved to main.cpp for consistency
 }
 
 void Renderer::cleanup() {
+    // Ensure the renderer's GL context is current before deleting GL resources.
+    GLFWwindow* prevCtx = glfwGetCurrentContext();
+    if (window) glfwMakeContextCurrent(window);
+
+    // Shutdown ImGui (only if initialized) while context is valid
+    if (imguiInitialized) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        imguiInitialized = false;
+    }
+
     if (starShaderProgram) {
         glDeleteProgram(starShaderProgram);
         starShaderProgram = 0;
@@ -620,6 +621,9 @@ void Renderer::cleanup() {
         glDeleteVertexArrays(1, &backgroundVAO);
         backgroundVAO = 0;
     }
+    // Restore previous context (if any) before destroying the window
+    if (prevCtx && prevCtx != window) glfwMakeContextCurrent(prevCtx);
+
     if (window) {
         glfwDestroyWindow(window);
         window = nullptr;

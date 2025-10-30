@@ -35,7 +35,8 @@ list(APPEND SOURCES ${IMGUI_SOURCES})
 # -------------------------------------------------------------
 # Define the executable target
 # -------------------------------------------------------------
-add_executable(PlanetsProject ${SOURCES})
+# WIN32 flag removes console window on Windows
+add_executable(PlanetsProject WIN32 ${SOURCES})
 
 # -------------------------------------------------------------
 # Include directories

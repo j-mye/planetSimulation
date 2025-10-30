@@ -23,6 +23,12 @@ public:
     void clearBodies() { bodies.clear(); }
 
     void computeForces(const float dt) {
+        // Clear force accumulator for all bodies before computing forces
+        for (Planet* p : bodies) {
+            p->clearForces();
+        }
+        
+        // Compute all gravitational forces and accumulate them
         const size_t n = bodies.size();
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = i + 1; j < n; ++j) {
@@ -38,13 +44,20 @@ public:
                 Vector2 dir = r.normalized();
                 Vector2 forceOnA = dir * forceMag;
 
+                // Accumulate forces (dt not used in applyForce anymore)
                 a->applyForce(forceOnA, dt);
                 b->applyForce(-forceOnA, dt);
             }
         }
+        
+        // Apply accumulated forces to velocities
+        for (Planet* p : bodies) {
+            p->integrateVelocity(dt);
+        }
     }
 
     void integrate(const float dt) {
+        // Update positions using current velocities (semi-implicit Euler)
         for (Planet* p : bodies) {
             p->setP(p->getP() + (p->getV() * dt));
             p->recordPosition();

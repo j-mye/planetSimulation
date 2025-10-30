@@ -13,9 +13,6 @@ private:
     PhysicsEngine physics;
     std::vector<Planet> planets;
     float deltaTime = 0.0015f;
-    bool running = false;
-
-    std::vector<Vector2> temp_forces;
 
 public:
     Simulation() = default;
@@ -23,9 +20,7 @@ public:
     void initRandom(int N, unsigned seed = 1337);
     void step();
     void update();
-
-    void run(int steps = 1000);
-    void printStatus() const;
+    
     std::vector<Planet>& getPlanets() { return planets; }
     void setTimeStep(float dt) { deltaTime = dt; }
     float getTimeStep() const { return deltaTime; }
